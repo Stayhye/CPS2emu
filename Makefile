@@ -32,7 +32,7 @@ DEFINES = -DSDL -DRS97
 INCLUDES = -I. -Isrc -Isrc/cps2 
 CFLAGS = $(DEFINES) $(INCLUDES) $(OPT_FLAGS) -std=gnu99 -DRS97
 CXXFLAGS = $(DEFINES) $(INCLUDES) $(OPT_FLAGS) -std=gnu++98
-LDFLAGS = -lSDL -lm -pthread -ldl -lstdc++ -lz
+LDFLAGS = -lSDL -lm -lstdc++ -lz
 
 EE_OBJS = $(OBJS)
 EE_INCS += $(INCLUDES)
