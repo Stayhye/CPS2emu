@@ -19,16 +19,22 @@ jobs:
         run: |
           apk update && apk add --no-cache build-base git curl
 
-      - name: Fix Missing Unzip and Compile
+      - name: Fix Source and Compile
         run: |
-          # 1. Create the missing directory structure
+          # 1. Create the directories the Makefile expects
           mkdir -p src/zip
+          mkdir -p src/sound
+          mkdir -p src/cps2
+          mkdir -p src/cpu/m68000
+          mkdir -p src/cpu/z80
           mkdir -p bin
 
-          # 2. Download a compatible unzip.c/h (Common for GP2X/PS2 ports)
-          # We use a reliable source for retro-port unzip code
+          # 2. Download the missing ZIP handling files 
+          # These are required by your OBJS list: src/zip/unzip.o and src/zip/zfile.o
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.h -o src/zip/zfile.h
 
           # 3. Locate the toolchain
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
@@ -36,6 +42,7 @@ jobs:
           export PATH="$BIN_DIR:$PATH"
 
           # 4. Run make
+          # We force the PS2SDK include at the end to ensure it compiles for the right platform
           make \
             EE_CC="$EE_GCC_PATH" \
             EE_CXX="${BIN_DIR}/ee-g++" \
@@ -46,8 +53,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CPS2emu-PS2-Binary
-          path: |
-            bin/*.elf
-            bin/*.ELF
-            *.elf
-            *.ELF
+          # Your Makefile defines EE_BIN = bin/cps2emu.elf
+          path: bin/cps2emu.elf
