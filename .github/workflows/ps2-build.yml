@@ -1,53 +1,34 @@
-name: PS2 Build
-
-on:
-  push:
-    branches: [ "master", "main" ]
-  pull_request:
-    branches: [ "master", "main" ]
-
-jobs:
-  build-ps2:
-    runs-on: ubuntu-latest
-    container: ps2dev/ps2dev:latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install System Dependencies
+- name: Fix Source and Compile
         run: |
-          apk update && apk add --no-cache build-base git curl
+          # ... (Keep your previous mkdir and curl commands here) ...
 
-      - name: Fix Source and Compile
-        run: |
-          # 1. Create missing directories
-          mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
-
-          # 2. Download ALL missing files identified in logs
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.h -o src/zip/zfile.h
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
-          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
-
-          # 3. Locate toolchain
-          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
-          BIN_DIR=$(dirname "$EE_GCC_PATH")
-          export PATH="$BIN_DIR:$PATH"
-
-          # 4. Run make with FORCED CC
-          # We manually set CC and EE_CC to ensure 'D_EE' isn't mistaken for the compiler
+          # Run make
           make \
-            CC="$EE_GCC_PATH" \
             EE_CC="$EE_GCC_PATH" \
             EE_CXX="${BIN_DIR}/ee-g++" \
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-      - name: Upload ELF Artifact
+      - name: Package ISO
+        run: |
+          apk add --no-cache cdrkit
+          mkdir -p iso_root
+          
+          # 1. Copy the ELF and rename to uppercase for ISO standards
+          cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
+          
+          # 2. Create the SYSTEM.CNF (The boot instructions for PS2)
+          echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
+          echo "VER = 1.00" >> iso_root/SYSTEM.CNF
+          echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
+          
+          # 3. Create the ISO file
+          mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
+
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CPS2emu-PS2-Binary
-          path: bin/cps2emu.elf
+          name: CPS2emu-PS2-Package
+          path: |
+            bin/cps2emu.elf
+            bin/cps2emu.iso
