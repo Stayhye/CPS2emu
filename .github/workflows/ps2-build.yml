@@ -20,10 +20,10 @@ jobs:
           apk update && apk add --no-cache build-base git
 
       - name: Compile CPS2emu
-        # This tells GitHub to run the following commands inside the 'src' folder
         working-directory: ./src
         run: |
-          make clean
+          # We skip 'make clean' since the target is missing.
+          # The GitHub runner is a fresh environment, so 'clean' isn't strictly necessary.
           make \
             EE_CC=/usr/local/ps2dev/ee/bin/ee-gcc \
             EE_CXX=/usr/local/ps2dev/ee/bin/ee-g++ \
@@ -34,7 +34,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CPS2emu-PS2-Binary
-          # Search for the ELF inside the src folder where it was built
+          # Search for the ELF inside the src folder
           path: |
             src/*.ELF
             src/*.elf
