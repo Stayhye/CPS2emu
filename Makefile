@@ -55,5 +55,6 @@ reset:
 clean:
 	rm -f $(EE_BIN) $(EE_OBJS)
 
+EE_OBJS = $(OBJS)
 include $(PS2SDK)/samples/Makefile.pref
 include $(PS2SDK)/samples/Makefile.eeglobal
