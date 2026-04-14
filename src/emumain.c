@@ -290,10 +290,21 @@ int main(int argc, char *argv[])
 
 	parse_cmd(argc, argv);
 
-	/* Initialize SDL - Removed TIMER to save cycles, strictly using Video, Audio, and Joystick */
-	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
-    	fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
-    	exit (1);
+	/* Initialize SDL */
+/* We removed SDL_INIT_JOYSTICK from the main init and will try to init it separately */
+/* because on some PS2 SDL ports, JOYSTICK and KEYBOARD are tied together */
+if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+    fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
+    // We only exit if Video/Audio fails
+    exit (1);
+}
+
+/* Try to init Joystick separately so if it fails, the emu keeps running */
+SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+
+/* Force SDL to ignore the missing keyboard device */
+SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
+SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 }
 
 /* Explicitly ignore keyboard events to save processing time */
