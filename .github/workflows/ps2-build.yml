@@ -7,27 +7,37 @@ on:
     branches: [ "master", "main" ]
 
 jobs:
-  build:
+  build-ps2:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
 
-    # This is the critical part to fix Error 127
     env:
       PS2DEV: /usr/local/ps2dev
       PS2SDK: /usr/local/ps2dev/ps2sdk
+      # Adding both PS2-specific bins and standard system bins to PATH
       PATH: /usr/local/ps2dev/bin:/usr/local/ps2dev/ee/bin:/usr/local/ps2dev/iop/bin:/usr/local/ps2dev/dvp/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install System Dependencies
+        run: |
+          apk update
+          apk add --no-cache build-base git
+
       - name: Compile CPS2emu
         run: |
+          # Clean previous builds to prevent object file conflicts
           make clean
+          # Runs the build using the PS2SDK environment
           make
-          
+
       - name: Upload ELF Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cps2emu-ps2
-          path: "*.ELF"
+          name: CPS2emu-PS2-Binary
+          # Scans for the generated .ELF file (case insensitive)
+          path: |
+            *.ELF
+            *.elf
