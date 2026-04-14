@@ -21,29 +21,26 @@ jobs:
 
       - name: Fix Source and Compile
         run: |
-          # 1. Create the directories the Makefile expects
-          mkdir -p src/zip
-          mkdir -p src/sound
-          mkdir -p src/cps2
-          mkdir -p src/cpu/m68000
-          mkdir -p src/cpu/z80
-          mkdir -p bin
+          # 1. Create missing directories
+          mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # 2. Download the missing ZIP handling files 
-          # These are required by your OBJS list: src/zip/unzip.o and src/zip/zfile.o
+          # 2. Download ALL missing files identified in logs
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.h -o src/zip/zfile.h
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Locate the toolchain
+          # 3. Locate toolchain
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
           export PATH="$BIN_DIR:$PATH"
 
-          # 4. Run make
-          # We force the PS2SDK include at the end to ensure it compiles for the right platform
+          # 4. Run make with FORCED CC
+          # We manually set CC and EE_CC to ensure 'D_EE' isn't mistaken for the compiler
           make \
+            CC="$EE_GCC_PATH" \
             EE_CC="$EE_GCC_PATH" \
             EE_CXX="${BIN_DIR}/ee-g++" \
             EE_AR="${BIN_DIR}/ee-ar" \
@@ -53,5 +50,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CPS2emu-PS2-Binary
-          # Your Makefile defines EE_BIN = bin/cps2emu.elf
           path: bin/cps2emu.elf
