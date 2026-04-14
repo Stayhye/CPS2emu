@@ -11,33 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
 
-    env:
-      PS2DEV: /usr/local/ps2dev
-      PS2SDK: /usr/local/ps2dev/ps2sdk
-      # Adding both PS2-specific bins and standard system bins to PATH
-      PATH: /usr/local/ps2dev/bin:/usr/local/ps2dev/ee/bin:/usr/local/ps2dev/iop/bin:/usr/local/ps2dev/dvp/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup PS2 Environment
+        run: |
+          # Persistently set paths for all subsequent steps
+          echo "PS2DEV=/usr/local/ps2dev" >> $GITHUB_ENV
+          echo "PS2SDK=/usr/local/ps2dev/ps2sdk" >> $GITHUB_ENV
+          echo "PATH=/usr/local/ps2dev/bin:/usr/local/ps2dev/ee/bin:/usr/local/ps2dev/iop/bin:/usr/local/ps2dev/dvp/bin:/usr/bin:/bin" >> $GITHUB_PATH
+
       - name: Install System Dependencies
         run: |
-          apk update
-          apk add --no-cache build-base git
+          # The image is Alpine-based; ensure make and git are present
+          apk update && apk add --no-cache build-base git
 
       - name: Compile CPS2emu
         run: |
-          # Clean previous builds to prevent object file conflicts
+          # Use the environment variables set in the Setup step
           make clean
-          # Runs the build using the PS2SDK environment
           make
 
       - name: Upload ELF Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CPS2emu-PS2-Binary
-          # Scans for the generated .ELF file (case insensitive)
           path: |
             *.ELF
             *.elf
