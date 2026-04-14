@@ -17,13 +17,14 @@ jobs:
 
       - name: Install System Dependencies
         run: |
+          # Ensure make is available in the Alpine container
           apk update && apk add --no-cache build-base git
 
       - name: Compile CPS2emu
-        working-directory: ./src
         run: |
-          # We skip 'make clean' since the target is missing.
-          # The GitHub runner is a fresh environment, so 'clean' isn't strictly necessary.
+          # We run make from the root. 
+          # We use -f Makefile just in case it's named differently, 
+          # but usually 'make' alone works here.
           make \
             EE_CC=/usr/local/ps2dev/ee/bin/ee-gcc \
             EE_CXX=/usr/local/ps2dev/ee/bin/ee-g++ \
@@ -34,7 +35,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CPS2emu-PS2-Binary
-          # Search for the ELF inside the src folder
           path: |
+            *.ELF
+            *.elf
             src/*.ELF
             src/*.elf
