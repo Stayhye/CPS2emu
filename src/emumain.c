@@ -293,6 +293,9 @@ int main(int argc, char *argv[])
 	/* Initialize SDL */
 /* We removed SDL_INIT_JOYSTICK from the main init and will try to init it separately */
 /* because on some PS2 SDL ports, JOYSTICK and KEYBOARD are tied together */
+// Force SDL to use the "dummy" event driver so it doesn't look for a physical keyboard
+setenv("SDL_VIDEODRIVER", "ps2", 1);
+setenv("SDL_NOMOUSE", "1", 1);
 if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
     fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
     // We only exit if Video/Audio fails
