@@ -17,19 +17,28 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          # Ensure make is available in the Alpine container
           apk update && apk add --no-cache build-base git
 
-      - name: Compile CPS2emu
+      - name: Locate Toolchain and Compile
         run: |
-          # We run make from the root. 
-          # We use -f Makefile just in case it's named differently, 
-          # but usually 'make' alone works here.
+          # 1. Find the actual path of ee-gcc
+          # This command searches the container for the compiler and takes the first result
+          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
+          BIN_DIR=$(dirname "$EE_GCC_PATH")
+          
+          echo "Found ee-gcc at: $EE_GCC_PATH"
+          echo "Adding $BIN_DIR to PATH"
+          
+          # 2. Export the path so 'make' can see it
+          export PATH="$BIN_DIR:$PATH"
+          
+          # 3. Run make
+          # We pass the paths directly into the variables the PS2SDK Makefile expects
           make \
-            EE_CC=/usr/local/ps2dev/ee/bin/ee-gcc \
-            EE_CXX=/usr/local/ps2dev/ee/bin/ee-g++ \
-            EE_AR=/usr/local/ps2dev/ee/bin/ee-ar \
-            EE_LD=/usr/local/ps2dev/ee/bin/ee-gcc
+            EE_CC="$EE_GCC_PATH" \
+            EE_CXX="${BIN_DIR}/ee-g++" \
+            EE_AR="${BIN_DIR}/ee-ar" \
+            EE_LD="$EE_GCC_PATH"
 
       - name: Upload ELF Artifact
         uses: actions/upload-artifact@v4
