@@ -290,10 +290,15 @@ int main(int argc, char *argv[])
 
 	parse_cmd(argc, argv);
 
-	/* Initialize SDL */
-	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK | SDL_INIT_TIMER) < 0) {
-		fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
-		exit (1);
+	/* Initialize SDL - Removed TIMER to save cycles, strictly using Video, Audio, and Joystick */
+	if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+    	fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
+    	exit (1);
+}
+
+/* Explicitly ignore keyboard events to save processing time */
+SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
+SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 	}
 
 #ifdef RS97
