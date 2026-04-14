@@ -38,7 +38,8 @@ EE_OBJS = $(OBJS)
 EE_INCS += $(INCLUDES)
 EE_INCS += -I../../ -I$(PS2SDK)/ports/include
 EE_LDFLAGS = -L../../lib/ -L$(PS2SDK)/ports/lib -L$(PS2DEV)/gsKit/lib
-EE_LIBS = -L. -lc -L$(PS2DEV)/gsKit/lib -L../lib -lsdlmixer -lSDL_image -lpng -ljpeg -lsdl -lgskit -ldmakit -laudsrv -lc -lm
+EE_LIBS = -lsdlmixer -lSDL_image -lpng -ljpeg -lsdl -lgskit -ldmakit -laudsrv -lpadx -lmtap -lmc -lpc -lm -lc -lrt
+#EE_LIBS = -L. -lc -L$(PS2DEV)/gsKit/lib -L../lib -lsdlmixer -lSDL_image -lpng -ljpeg -lsdl -lgskit -ldmakit -laudsrv -lc -lm
 EE_INCS += -I./src/
 
 EE_CXXFLAGS += $(CXXFLAGS)
