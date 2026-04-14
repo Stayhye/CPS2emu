@@ -17,23 +17,25 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          apk update && apk add --no-cache build-base git
+          apk update && apk add --no-cache build-base git curl
 
-      - name: Locate Toolchain and Compile
+      - name: Fix Missing Unzip and Compile
         run: |
-          # 1. Find the actual path of ee-gcc
-          # This command searches the container for the compiler and takes the first result
+          # 1. Create the missing directory structure
+          mkdir -p src/zip
+          mkdir -p bin
+
+          # 2. Download a compatible unzip.c/h (Common for GP2X/PS2 ports)
+          # We use a reliable source for retro-port unzip code
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
+
+          # 3. Locate the toolchain
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
-          
-          echo "Found ee-gcc at: $EE_GCC_PATH"
-          echo "Adding $BIN_DIR to PATH"
-          
-          # 2. Export the path so 'make' can see it
           export PATH="$BIN_DIR:$PATH"
-          
-          # 3. Run make
-          # We pass the paths directly into the variables the PS2SDK Makefile expects
+
+          # 4. Run make
           make \
             EE_CC="$EE_GCC_PATH" \
             EE_CXX="${BIN_DIR}/ee-g++" \
@@ -45,7 +47,7 @@ jobs:
         with:
           name: CPS2emu-PS2-Binary
           path: |
-            *.ELF
+            bin/*.elf
+            bin/*.ELF
             *.elf
-            src/*.ELF
-            src/*.elf
+            *.ELF
