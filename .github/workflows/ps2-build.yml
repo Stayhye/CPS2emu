@@ -1,0 +1,37 @@
+name: PS2 Build
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ps2dev/ps2dev:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apk add --no-cache build-base git
+
+      - name: Compile CPS2emu
+        run: |
+          # If the repo uses a specific Makefile for PS2, 
+          # change 'make' to 'make -f Makefile.ps2' or similar.
+          make clean
+          make
+
+      - name: Upload ELF Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cps2emu-ps2-binaries
+          # This assumes the output is an .ELF file. 
+          # Adjust the pattern if it generates a .BIN or .IRX
+          path: |
+            *.ELF
+            *.elf
