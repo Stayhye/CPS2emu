@@ -15,23 +15,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup PS2 Environment
-        run: |
-          # Persistently set paths for all subsequent steps
-          echo "PS2DEV=/usr/local/ps2dev" >> $GITHUB_ENV
-          echo "PS2SDK=/usr/local/ps2dev/ps2sdk" >> $GITHUB_ENV
-          echo "PATH=/usr/local/ps2dev/bin:/usr/local/ps2dev/ee/bin:/usr/local/ps2dev/iop/bin:/usr/local/ps2dev/dvp/bin:/usr/bin:/bin" >> $GITHUB_PATH
-
       - name: Install System Dependencies
         run: |
-          # The image is Alpine-based; ensure make and git are present
           apk update && apk add --no-cache build-base git
 
       - name: Compile CPS2emu
         run: |
-          # Use the environment variables set in the Setup step
+          # We explicitly define the CC and AR paths to ensure 100% success 
+          # regardless of the shell's PATH variable.
           make clean
-          make
+          make \
+            EE_CC=/usr/local/ps2dev/ee/bin/ee-gcc \
+            EE_CXX=/usr/local/ps2dev/ee/bin/ee-g++ \
+            EE_AR=/usr/local/ps2dev/ee/bin/ee-ar \
+            EE_LD=/usr/local/ps2dev/ee/bin/ee-gcc
 
       - name: Upload ELF Artifact
         uses: actions/upload-artifact@v4
