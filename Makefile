@@ -9,6 +9,13 @@
 # $Id: Makefile 1187 2005-06-27 17:34:43Z lukasz $
 #CPS2 EMU
 
+EE_CC = ee-gcc
+EE_CXX = ee-g++
+EE_AS = ee-as
+EE_LD = ee-ld
+EE_AR = ee-ar
+EE_OBJCOPY = ee-objcopy
+EE_STRIP = ee-strip
 EE_BIN = bin/cps2emu.elf
 
 # Redream (main engine) objet files codes
@@ -49,4 +56,4 @@ clean:
 	rm -f $(EE_BIN) $(EE_OBJS)
 
 include $(PS2SDK)/samples/Makefile.pref
-include $(PS2SDK)/samples/Makefile.eeglobal_cpp
+include $(PS2SDK)/samples/Makefile.eeglobal
