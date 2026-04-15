@@ -1,4 +1,4 @@
-name: PS2 Build
+name: PS2 AvP Hardcoded Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ "master", "main" ]
 
 jobs:
-  build-ps2:
+  build-ps2-avp:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
 
@@ -17,17 +17,14 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          # cdrkit provides mkisofs for ISO creation
           apk update && apk add --no-cache build-base git curl cdrkit
 
       - name: Prepare Source and Compile
         run: |
+          # 1. Setup directories
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # Disable Keyboard in SDL initialization to prevent the -19 crash
-          sed -i 's/SDL_INIT_KEYBOARD//g' src/emumain.c || true
-          
-          # 1. Download base engine files
+          # 2. Download missing engine source files
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -35,58 +32,61 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 2. FORCE HARDCODING VIA SED
-          # This replaces "megaman2" with "AVSPU" regardless of what's in the file
-          sed -i 's/"megaman2"/"AVSPU"/g' src/cps2/driver.c || true
-          sed -i 's/"megaman2"/"AVSPU"/g' src/emumain.c || true
+          # 3. LOCATE TOOLCHAIN DYNAMICALLY
+          # This finds the actual path of ee-gcc in this specific container
+          EE_GCC_BIN=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
+          EE_BIN_DIR=$(dirname "$EE_GCC_BIN")
           
-          # 3. Setup PS2 Environment
+          echo "Found compiler at: $EE_BIN_DIR"
+          
+          # Setup environment
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
-          EE_BIN_DIR=$PS2DEV/ee/bin
-          
-          # 4. TRIPLE CLEAN
-          # Delete the specific object file to force a recompile of our hardcoded logic
-          rm -f src/cps2/cps2.o
+          export PATH="$EE_BIN_DIR:$PS2DEV/bin:$PS2SDK/bin:$PATH"
+
+          # 4. FORCE HARDCODING & KEYBOARD BYPASS
+          # Replaces megaman2 with AVSPU and removes keyboard requirement from SDL
+          sed -i 's/"megaman2"/"AVSPU"/g' src/emumain.c || true
+          sed -i 's/"megaman2"/"AVSPU"/g' src/cps2/driver.c || true
+          sed -i 's/SDL_INIT_KEYBOARD//g' src/emumain.c || true
+
+          # 5. Clean and Build using the found directory
+          rm -rf bin/*.elf
           make clean || true
           
-          # 5. Build
           make -f Makefile \
-            CC=$EE_BIN_DIR/ee-gcc \
-            EE_CC=$EE_BIN_DIR/ee-gcc \
-            EE_CXX=$EE_BIN_DIR/ee-g++ \
-            EE_LD=$EE_BIN_DIR/ee-gcc \
-            EE_AR=$EE_BIN_DIR/ee-ar
+            CC="$EE_BIN_DIR/ee-gcc" \
+            EE_CC="$EE_BIN_DIR/ee-gcc" \
+            EE_CXX="$EE_BIN_DIR/ee-g++" \
+            EE_LD="$EE_BIN_DIR/ee-gcc" \
+            EE_AR="$EE_BIN_DIR/ee-ar" \
+            EE_AS="$EE_BIN_DIR/ee-as" \
+            EE_OBJCPY="$EE_BIN_DIR/ee-objcopy" \
+            EE_STRIP="$EE_BIN_DIR/ee-strip"
 
-      - name: Package ISO with Drivers and ROM
+      - name: Package ISO with Drivers
         run: |
-          # 1. Prepare ISO root
           mkdir -p iso_root
           
-          # 2. Verify ELF creation and copy to root
-          if [ -f bin/cps2emu.elf ]; then
-            cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          else
-            echo "FATAL ERROR: bin/cps2emu.elf was not created!"
+          if [ ! -f bin/cps2emu.elf ]; then
+            echo "BUILD FAILED: bin/cps2emu.elf not found."
             exit 1
           fi
           
-          # 3. Download IRX drivers (Required for the SDL bypass in your cps2.c)
+          cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
+          
+          # Drivers for SDL bypass
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 4. Generate boot configuration
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 5. Create the bootable ISO
           mkisofs -o bin/avp_ps2.iso -R -J -input-charset utf8 iso_root/
 
-      - name: Upload Build Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AvP-PS2-ISO-Package
-          path: |
-            bin/cps2emu.elf
-            bin/avp_ps2.iso
+          name: AvP-PS2-ISO
+          path: bin/avp_ps2.iso
