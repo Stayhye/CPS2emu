@@ -17,15 +17,14 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          # cdrkit for ISO creation, curl for dependencies
           apk update && apk add --no-cache build-base git curl cdrkit
 
       - name: Prepare Source and Compile
         run: |
-          # 1. Ensure all necessary directories exist
+          # 1. Setup directories
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # 2. Download missing engine source files required by the Makefile
+          # 2. Download missing engine source files
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -33,56 +32,51 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Locate the toolchain and export path
-          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
-          BIN_DIR=$(dirname "$EE_GCC_PATH")
-          export PATH="$BIN_DIR:$PATH"
+          # 3. Locate Toolchain
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
-          export PATH=$PATH:$PS2SDK/bin
+          export PATH=$PATH:$PS2DEV/bin:$PS2DEV/ee/bin:$PS2SDK/bin
+          
+          EE_BIN=$PS2DEV/ee/bin/ee-gcc
+          EE_CXX=$PS2DEV/ee/bin/ee-g++
+          EE_AR=$PS2DEV/ee/bin/ee-ar
 
           # 4. Clean and Build
-          # We run 'make clean' to wipe any 'megaman' remnants
+          # We manually override CC and EE_CC to fix the "D_EE: No such file" error
           make clean || true
           
-          # We call make. If it fails here, the workflow will stop and show the error.
           make \
-            CC="$EE_GCC_PATH" \
-            EE_CC="$EE_GCC_PATH" \
-            EE_CXX="${BIN_DIR}/ee-g++" \
-            EE_AR="${BIN_DIR}/ee-ar" \
-            EE_LD="$EE_GCC_PATH"
+            CC="$EE_BIN" \
+            EE_CC="$EE_BIN" \
+            EE_CXX="$EE_CXX" \
+            EE_AR="$EE_AR" \
+            EE_LD="$EE_BIN" \
+            EE_AS="$PS2DEV/ee/bin/ee-as"
 
-      - name: Package ISO with Drivers and ROM
+      - name: Package ISO
         run: |
-          # 1. Prepare ISO root
           mkdir -p iso_root
           
-          # 2. Verify ELF exists and copy it
-          if [ -f bin/cps2emu.elf ]; then
-            cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          else
-            echo "ERROR: bin/cps2emu.elf was not created during build!"
+          # Check if ELF was built
+          if [ ! -f bin/cps2emu.elf ]; then
+            echo "ELF NOT FOUND! Build failed."
             exit 1
           fi
           
-          # 3. Download the IRX drivers to the root (Uppercase)
-          # These prevent the 'usbkbd' crash by satisfying SDL's startup check
+          cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
+          
+          # Download drivers
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 4. Create the SYSTEM.CNF boot file
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 5. Generate the final bootable ISO
           mkisofs -o bin/avp_ps2.iso -R -J -input-charset utf8 iso_root/
 
-      - name: Upload Build Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AvP-PS2-ISO-Package
-          path: |
-            bin/cps2emu.elf
-            bin/avp_ps2.iso
+          name: AvP-PS2-ISO
+          path: bin/avp_ps2.iso
