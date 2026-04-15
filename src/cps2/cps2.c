@@ -1,142 +1,142 @@
 /******************************************************************************
-
-	cps2.c
-
-	CPS2 emulation core
-
+    cps2.c
+    CPS2 emulation core - Hardcoded for Alien vs. Predator (avp)
 ******************************************************************************/
 
+#include <string.h>
+#include <stdio.h>
+#include <kernel.h>
+#include <sifrpc.h>
+#include <loadfile.h>
 #include "cps2.h"
 
-
 /******************************************************************************
-	Local function
+    Local function
 ******************************************************************************/
 
 /*--------------------------------------------------------
-	CPS2 emulation initialize
+    CPS2 emulation initialize
 --------------------------------------------------------*/
-
 static int cps2_init(void)
 {
 #ifdef HISCORE
-	hs_clear();
-	if (option_hiscore) hs_open();
+    hs_clear();
+    if (option_hiscore) hs_open();
 #endif
-	cps2_driver_init();
+    cps2_driver_init();
 
-	return cps2_video_init();
+    return cps2_video_init();
 }
 
-
 /*--------------------------------------------------------
-	CPS2 emulation reset
+    CPS2 emulation reset
 --------------------------------------------------------*/
-
 static void cps2_reset(void)
 {
-	cps2_driver_reset();
-	cps2_video_reset();
+    cps2_driver_reset();
+    cps2_video_reset();
 
-	timer_reset();
-	input_reset();
-	sound_reset();
-	sound_volume(option_sound_volume);
-	
-	msg_screen_clear();
-	autoframeskip_reset();
+    timer_reset();
+    input_reset();
+    sound_reset();
+    sound_volume(option_sound_volume);
+    
+    msg_screen_clear();
+    autoframeskip_reset();
 
-	Loop = LOOP_EXEC;
+    Loop = LOOP_EXEC;
 }
 
-
 /*--------------------------------------------------------
-	CPS2 emulation shutdown and exit
+    CPS2 emulation shutdown and exit
 --------------------------------------------------------*/
-
 static void cps2_exit(void)
 {
-	video_clear_screen();
-	msg_screen_init();
+    video_clear_screen();
+    msg_screen_init();
 
-	msg_printf("System shutdown.\n");
+    msg_printf("System shutdown.\n");
 
 #ifdef HISCORE
-	hs_close();
+    hs_close();
 #endif
-	cps2_video_exit();
-	cps2_driver_exit();
-	save_gamecfg(game_name);
-	//sync();//donde esta 
+    cps2_video_exit();
+    cps2_driver_exit();
+    save_gamecfg(game_name);
 
-	msg_printf("Done.\n");
+    msg_printf("Done.\n");
 }
-
 
 /*--------------------------------------------------------
-	CPS2 emulation start
+    CPS2 emulation start
 --------------------------------------------------------*/
-
 static void cps2_run(void)
 {
-	while (Loop >= LOOP_RESET)
-	{
-		cps2_reset();
+    while (Loop >= LOOP_RESET)
+    {
+        cps2_reset();
 
-		while (Loop == LOOP_EXEC)
-		{
-			timer_update_cpu();
+        while (Loop == LOOP_EXEC)
+        {
+            timer_update_cpu();
 #ifdef HISCORE
-			if (option_hiscore) hs_update();
+            if (option_hiscore) hs_update();
 #endif
-			update_inputport();
-			update_screen();
-		}
+            update_inputport();
+            update_screen();
+        }
 
-		video_clear_screen();
-		sound_mute(1);
-
-	}
+        video_clear_screen();
+        sound_mute(1);
+    }
 }
 
-
 /******************************************************************************
-	Global function
+    Global function
 ******************************************************************************/
 
 /*--------------------------------------------------------
-	CPS2 emulation main
+    CPS2 emulation main
 --------------------------------------------------------*/
-
 void cps2_main(void)
 {
-	Loop = LOOP_RESET;
-	while (Loop >= LOOP_RESTART)
-	{
-		Loop = LOOP_EXEC;
+    // --- PS2 SPECIFIC INITIALIZATION ---
+    // 1. Set Thread Priority to keep emulation stable
+    int main_id = GetThreadId();
+    ChangeThreadPriority(main_id, 72);
 
-		fatal_error = 0;
+    // 2. Load USB drivers to satisfy SDL dependencies
+    SifInitRpc(0);
+    SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
+    SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-		video_clear_screen();
+    // 3. Force the game name to Alien vs. Predator
+    // This skips the need for a frontend menu
+    strcpy(game_name, "avp");
 
-		if (memory_init())
-		{
+    Loop = LOOP_RESET;
+    while (Loop >= LOOP_RESTART)
+    {
+        Loop = LOOP_EXEC;
+        fatal_error = 0;
+        video_clear_screen();
 
-			if (sound_init())
-			{
-				input_init();
+        if (memory_init())
+        {
+            if (sound_init())
+            {
+                input_init();
 
-				if (cps2_init())
-				{
+                if (cps2_init())
+                {
+                    cps2_run();
+                }
+                cps2_exit();
 
-					cps2_run();
-				}
-				cps2_exit();
-
-				input_shutdown();
-			}
-			sound_exit();
-		}
-		memory_shutdown();
-	}
+                input_shutdown();
+            }
+            sound_exit();
+        }
+        memory_shutdown();
+    }
 }
