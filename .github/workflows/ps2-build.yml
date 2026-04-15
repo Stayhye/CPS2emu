@@ -17,14 +17,15 @@ jobs:
 
       - name: Install System Dependencies
         run: |
+          # cdrkit provides mkisofs for ISO creation
           apk update && apk add --no-cache build-base git curl cdrkit
 
       - name: Fix Source and Compile
         run: |
-          # 1. Prepare directories
+          # 1. Create directory structure
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # 2. Download missing source files
+          # 2. Download missing source files required by the Makefile
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -32,10 +33,12 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Compile
+          # 3. Locate the toolchain dynamically
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
           export PATH="$BIN_DIR:$PATH"
+
+          # 4. Run make
           make \
             CC="$EE_GCC_PATH" \
             EE_CC="$EE_GCC_PATH" \
@@ -47,26 +50,26 @@ jobs:
         run: |
           mkdir -p iso_root
           
-          # 1. Copy the ELF
+          # 1. Copy the compiled ELF to the ISO root
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
           
-          # 2. Bundle the required IRX files from the SDK
-          # These paths are standard within the ps2dev docker container
-          cp $PS2SDK/iop/irx/usbd.irx iso_root/USBD.IRX
-          cp $PS2SDK/iop/irx/usbkbd.irx iso_root/USBKBD.IRX
+          # 2. Download the required IRX files to satisfy SDL keyboard dependencies
+          # We use curl because these aren't always in the standard Docker IRX folder
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 3. Create the SYSTEM.CNF
+          # 3. Create the SYSTEM.CNF (Boot instructions)
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 4. Create the ISO
+          # 4. Generate the final ISO image
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CPS2emu-PS2-ISO
+          name: CPS2emu-PS2-ISO-Package
           path: |
             bin/cps2emu.elf
             bin/cps2emu.iso
