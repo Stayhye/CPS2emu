@@ -1,6 +1,6 @@
 /******************************************************************************
     cps2.c
-    CPS2 emulation core - Hardcoded for Alien vs. Predator (avspu)
+    CPS2 emulation core - Hardcoded for Alien vs. Predator (AVSPU)
 ******************************************************************************/
 
 #include <string.h>
@@ -23,7 +23,7 @@ static int cps2_init(void)
     hs_clear();
     if (option_hiscore) hs_open();
 #endif
-    // This will now look for the "avspu" driver definition
+    // This will now look for the "AVSPU" driver definition
     cps2_driver_init();
 
     return cps2_video_init();
@@ -102,19 +102,19 @@ static void cps2_run(void)
 void cps2_main(void)
 {
     // --- PS2 HARDWARE BOOT SEQUENCE ---
-    // 1. Set Thread Priority
+    // 1. Set Thread Priority for stable emulation
     int main_id = GetThreadId();
     ChangeThreadPriority(main_id, 72);
 
-    // 2. Initialize SIF and Load Modules from ISO
-    // This is mandatory to prevent the "Unknown device usbkbd" crash
+    // 2. Initialize SIF and Load Modules from ISO root
+    // Filenames must be UPPERCASE to match the ISO root
     SifInitRpc(0);
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    // 3. Force the game name to the US version of AvP
-    // The emulator will now look for avspu.zip or extracted avspu files
-    strcpy(game_name, "avspu");
+    // 3. Force the game name to the US version of AvP (Uppercase)
+    // The loader will look for AVSPU.ZIP on the CDROM
+    strcpy(game_name, "AVSPU");
 
     Loop = LOOP_RESET;
     while (Loop >= LOOP_RESTART)
