@@ -52,6 +52,10 @@ jobs:
           
           # Copy your ELF
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
+
+          # Download the drivers so SDL doesn't panic
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
           # If you have the AvP zip, put it here (or the extracted files)
           # cp path/to/avp.zip iso_root/roms/avp.zip
