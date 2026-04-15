@@ -1,25 +1,4 @@
-name: PS2 AvP Hardcoded Build
-
-on:
-  push:
-    branches: [ "master", "main" ]
-  pull_request:
-    branches: [ "master", "main" ]
-
-jobs:
-  build-ps2-avp:
-    runs-on: ubuntu-latest
-    container: ps2dev/ps2dev:latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install System Dependencies
-        run: |
-          apk update && apk add --no-cache build-base git curl cdrkit
-
-      - name: Prepare Source and Compile
+- name: Prepare Source and Compile
         run: |
           # 1. Setup directories
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
@@ -32,53 +11,22 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Setup PS2 Environment
+          # 3. Define Absolute Toolchain Paths
+          # In this container, these are the confirmed locations
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
-          export PATH=$PATH:$PS2DEV/bin:$PS2DEV/ee/bin:$PS2SDK/bin
-
-          # 4. Patch Makefile to use absolute paths
-          # This stops the "D_EE: No such file" error by ensuring EE_CC is never empty
-          sed -i 's/EE_CC =/EE_CC ?=/g' Makefile || true
-          sed -i 's/EE_CXX =/EE_CXX ?=/g' Makefile || true
-
-          # 5. Clean and Build
-          # We explicitly pass the compiler location to the Makefile
+          EE_BIN_DIR=$PS2DEV/ee/bin
+          
+          # 4. Clean and Build with Absolute Paths
+          # This forces the Makefile to find the compiler regardless of $PATH
           make clean || true
           
           make -f Makefile \
-            CC=ee-gcc \
-            EE_CC=ee-gcc \
-            EE_CXX=ee-g++ \
-            EE_LD=ee-gcc \
-            EE_AR=ee-ar \
-            EE_OBJCPY=ee-objcopy \
-            EE_STRIP=ee-strip
-
-      - name: Package ISO
-        run: |
-          mkdir -p iso_root
-          
-          # Verification check
-          if [ ! -f bin/cps2emu.elf ]; then
-            echo "BUILD FAILED: bin/cps2emu.elf not found."
-            exit 1
-          fi
-          
-          cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          
-          # Drivers for SDL Keyboard bypass
-          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
-          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
-          
-          echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
-          echo "VER = 1.00" >> iso_root/SYSTEM.CNF
-          echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
-          
-          mkisofs -o bin/avp_ps2.iso -R -J -input-charset utf8 iso_root/
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: AvP-PS2-ISO
-          path: bin/avp_ps2.iso
+            CC=$EE_BIN_DIR/ee-gcc \
+            EE_CC=$EE_BIN_DIR/ee-gcc \
+            EE_CXX=$EE_BIN_DIR/ee-g++ \
+            EE_LD=$EE_BIN_DIR/ee-gcc \
+            EE_AR=$EE_BIN_DIR/ee-ar \
+            EE_AS=$EE_BIN_DIR/ee-as \
+            EE_OBJCPY=$EE_BIN_DIR/ee-objcopy \
+            EE_STRIP=$EE_BIN_DIR/ee-strip
