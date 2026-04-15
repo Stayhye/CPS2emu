@@ -1,6 +1,27 @@
-- name: Prepare Source and Compile
+name: PS2 AvP Hardcoded Build
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build-ps2-avp:
+    runs-on: ubuntu-latest
+    container: ps2dev/ps2dev:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
         run: |
-          # 1. Setup directories
+          apk update && apk add --no-cache build-base git curl cdrkit
+
+      - name: Prepare Source and Compile
+        run: |
+          # 1. Setup necessary directory structure
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
           # 2. Download missing engine source files
@@ -12,13 +33,13 @@
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
           # 3. Define Absolute Toolchain Paths
-          # In this container, these are the confirmed locations
+          # This bypasses the PATH issues that caused Error 127
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
           EE_BIN_DIR=$PS2DEV/ee/bin
           
           # 4. Clean and Build with Absolute Paths
-          # This forces the Makefile to find the compiler regardless of $PATH
+          # Explicitly passing paths to Makefile variables CC and EE_CC
           make clean || true
           
           make -f Makefile \
@@ -30,3 +51,36 @@
             EE_AS=$EE_BIN_DIR/ee-as \
             EE_OBJCPY=$EE_BIN_DIR/ee-objcopy \
             EE_STRIP=$EE_BIN_DIR/ee-strip
+
+      - name: Package ISO with Drivers and ROM
+        run: |
+          # 1. Prepare ISO root
+          mkdir -p iso_root
+          
+          # 2. Verify ELF creation and copy to root
+          if [ -f bin/cps2emu.elf ]; then
+            cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
+          else
+            echo "FATAL ERROR: bin/cps2emu.elf was not created!"
+            exit 1
+          fi
+          
+          # 3. Download IRX drivers (Required for the SDL bypass in your cps2.c)
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
+          
+          # 4. Generate boot configuration
+          echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
+          echo "VER = 1.00" >> iso_root/SYSTEM.CNF
+          echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
+          
+          # 5. Create the bootable ISO
+          mkisofs -o bin/avp_ps2.iso -R -J -input-charset utf8 iso_root/
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AvP-PS2-ISO-Package
+          path: |
+            bin/cps2emu.elf
+            bin/avp_ps2.iso
