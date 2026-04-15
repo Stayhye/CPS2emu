@@ -291,23 +291,20 @@ for(int i = 0; i < 100000; i++) { __asm__("nop"); }
     /* Use ONLY Video, Audio, and Joystick. 
        Keyboard is "handled" by the IRX we just loaded. */
     /* Start ONLY Video and Audio. This usually bypasses the keyboard check. */
-    // We skip the standard SDL_Init check because it fails on missing keyboards.
-    // We initialize Video and Audio first.
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-        printf("SDL_Init (Video/Audio) Failed: %s\n", SDL_GetError());
-        exit(1);
-    }
+    /* Initialize Video and Audio first - These MUST work */
+if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+    fprintf(stderr, "Fatal: SDL Video/Audio failed: %s\n", SDL_GetError());
+    exit(1); 
+}
 
-    // 4. Initialize Joystick (PS2 Controller) separately
-    // If this returns -1 because of the keyboard, we IGNORE it and continue.
-    if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) < 0) {
-        printf("Note: SDL Joystick/Kbd warning: %s\n", SDL_GetError());
-        // We do NOT exit. The PS2 controller will still work through SDL's driver.
-    }
+/* Now initialize the Joystick (PS2 Controller) subsystem.
+   We do NOT check the return value here. 
+   Even if it says 'PS2KbdInit failed', the app will keep running. */
+SDL_InitSubSystem(SDL_INIT_JOYSTICK);
 
-    // 5. Tell SDL to stop looking for keyboard events
-    SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
-    SDL_EventState(SDL_KEYUP, SDL_IGNORE);
+/* Force SDL to ignore all keyboard events so it stops polling the device */
+SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
+SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 
     /* Continue to Emulator Main Loop */
     return 0;
