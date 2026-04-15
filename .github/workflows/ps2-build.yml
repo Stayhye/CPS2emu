@@ -1,4 +1,4 @@
-name: PS2 AvP Hardcoded Build
+name: PS2 Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ "master", "main" ]
 
 jobs:
-  build-ps2-avp:
+  build-ps2:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
 
@@ -17,14 +17,15 @@ jobs:
 
       - name: Install System Dependencies
         run: |
+          # cdrkit provides mkisofs for ISO creation
           apk update && apk add --no-cache build-base git curl cdrkit
 
-      - name: Prepare Source and Compile
+      - name: Fix Source and Compile
         run: |
-          # 1. Setup necessary directory structure
+          # 1. Create directory structure
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # 2. Download missing engine source files
+          # 2. Download missing source files required by the Makefile
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -32,55 +33,43 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Define Absolute Toolchain Paths
-          # This bypasses the PATH issues that caused Error 127
-          export PS2DEV=/usr/local/ps2dev
-          export PS2SDK=$PS2DEV/ps2sdk
-          EE_BIN_DIR=$PS2DEV/ee/bin
-          
-          # 4. Clean and Build with Absolute Paths
-          # Explicitly passing paths to Makefile variables CC and EE_CC
-          make clean || true
-          
-          make -f Makefile \
-            CC=$EE_BIN_DIR/ee-gcc \
-            EE_CC=$EE_BIN_DIR/ee-gcc \
-            EE_CXX=$EE_BIN_DIR/ee-g++ \
-            EE_LD=$EE_BIN_DIR/ee-gcc \
-            EE_AR=$EE_BIN_DIR/ee-ar \
-            EE_AS=$EE_BIN_DIR/ee-as \
-            EE_OBJCPY=$EE_BIN_DIR/ee-objcopy \
-            EE_STRIP=$EE_BIN_DIR/ee-strip
+          # 3. Locate the toolchain dynamically
+          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
+          BIN_DIR=$(dirname "$EE_GCC_PATH")
+          export PATH="$BIN_DIR:$PATH"
 
-      - name: Package ISO with Drivers and ROM
+          # 4. Run make
+          make \
+            CC="$EE_GCC_PATH" \
+            EE_CC="$EE_GCC_PATH" \
+            EE_CXX="${BIN_DIR}/ee-g++" \
+            EE_AR="${BIN_DIR}/ee-ar" \
+            EE_LD="$EE_GCC_PATH"
+
+      - name: Package ISO with IRX Bundle
         run: |
-          # 1. Prepare ISO root
           mkdir -p iso_root
           
-          # 2. Verify ELF creation and copy to root
-          if [ -f bin/cps2emu.elf ]; then
-            cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          else
-            echo "FATAL ERROR: bin/cps2emu.elf was not created!"
-            exit 1
-          fi
+          # 1. Copy the compiled ELF to the ISO root
+          cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
           
-          # 3. Download IRX drivers (Required for the SDL bypass in your cps2.c)
+          # 2. Download the required IRX files to satisfy SDL keyboard dependencies
+          # We use curl because these aren't always in the standard Docker IRX folder
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 4. Generate boot configuration
+          # 3. Create the SYSTEM.CNF (Boot instructions)
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 5. Create the bootable ISO
-          mkisofs -o bin/avp_ps2.iso -R -J -input-charset utf8 iso_root/
+          # 4. Generate the final ISO image
+          mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
-      - name: Upload Build Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AvP-PS2-ISO-Package
+          name: CPS2emu-PS2-ISO-Package
           path: |
             bin/cps2emu.elf
-            bin/avp_ps2.iso
+            bin/cps2emu.iso
