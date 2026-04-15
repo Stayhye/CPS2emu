@@ -279,10 +279,10 @@ int main(int argc, char *argv[]) {
     dummy_usb_init();
 
     // 3. Now SDL will see 'usbkbd' in the device list and NOT crash
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
-        // This block should no longer trigger because the device 'exists' now
-        exit(1);
-    }
+    // Remove SDL_INIT_KEYBOARD if it exists
+   	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+    // Handle error
+}
 
 /* Now initialize the Joystick (PS2 Controller) subsystem.
    We do NOT check the return value here. 
