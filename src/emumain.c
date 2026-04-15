@@ -275,8 +275,17 @@ int main(int argc, char *argv[]) {
 
     // 3. Load USB Drivers from ISO
     // We load these to satisfy the SDL library's dependency check
-    SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
-    SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
+    // Try loading with the version suffix ;1
+if (SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL) < 0) {
+    printf("FAILED to load USBD.IRX from cdrom0\n");
+}
+
+if (SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL) < 0) {
+    printf("FAILED to load USBKBD.IRX from cdrom0\n");
+}
+
+// Give the IOP a moment to register the new devices
+for(int i = 0; i < 100000; i++) { __asm__("nop"); }
 
     // 4. Initialize SDL
     /* Use ONLY Video, Audio, and Joystick. 
