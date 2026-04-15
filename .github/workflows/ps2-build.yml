@@ -24,6 +24,9 @@ jobs:
         run: |
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
+          # Disable Keyboard in SDL initialization to prevent the -19 crash
+          sed -i 's/SDL_INIT_KEYBOARD//g' src/emumain.c || true
+          
           # 1. Download base engine files
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
