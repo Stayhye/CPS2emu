@@ -103,27 +103,18 @@ static void cps2_run(void)
 --------------------------------------------------------*/
 void cps2_main(void)
 {
-    // --- PS2 HARDWARE BOOT SEQUENCE ---
     SifInitRpc(0);
     
-    // Try Uppercase (Standard ISO)
-    if (SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL) < 0) {
-        // Try Lowercase (Some mkisofs settings)
-        SifLoadModule("cdrom0:\\usbd.irx;1", 0, NULL);
-    }
+    int usbd_ret = SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
+    int kbd_ret = SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    if (SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL) < 0) {
-        SifLoadModule("cdrom0:\\usbkbd.irx;1", 0, NULL);
-    }
+    printf("[PS2] USBD Load Return: %d\n", usbd_ret);
+    printf("[PS2] USBKBD Load Return: %d\n", kbd_ret);
 
-    // Increased Delay: Give the IOP more time to announce 'usbkbd' to the EE
+    // Harder delay
     int i;
-    for(i = 0; i < 5000000; i++) { 
-        __asm__("nop"); 
-    }
+    for(i = 0; i < 5000000; i++) { __asm__("nop"); }
 
-    // --- 2. HARDCODE GAME IDENTITY ---
-    // Forces the emulator to skip MegaMan and load Alien vs. Predator (US)
     strcpy(game_name, "AVSPU");
 
     // --- 3. THREAD MANAGEMENT ---
