@@ -1,11 +1,13 @@
-name: PS2 AvP Build
+name: PS2 AvP Hardcoded Build
 
 on:
   push:
     branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
 
 jobs:
-  build:
+  build-ps2-avp:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
 
@@ -17,11 +19,20 @@ jobs:
         run: |
           apk update && apk add --no-cache build-base git curl cdrkit
 
+      - name: Configure Environment
+        run: |
+          # Inject the PS2DEV paths into the GitHub Actions environment path
+          echo "/usr/local/ps2dev/bin" >> $GITHUB_PATH
+          echo "/usr/local/ps2dev/ee/bin" >> $GITHUB_PATH
+          echo "/usr/local/ps2dev/ps2sdk/bin" >> $GITHUB_PATH
+          echo "PS2DEV=/usr/local/ps2dev" >> $GITHUB_ENV
+          echo "PS2SDK=/usr/local/ps2dev/ps2sdk" >> $GITHUB_ENV
+
       - name: Prepare Source
         run: |
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
-          
-          # Download engine dependencies
+
+          # Download necessary engine files
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -29,15 +40,14 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # PATCH: Hardcode AVSPU and Disable Keyboard (Removes the -19 crash)
+          # Hardcode to AVSPU and remove Keyboard requirement to stop the -19 crash
           sed -i 's/"megaman2"/"AVSPU"/g' src/emumain.c || true
           sed -i 's/"megaman2"/"AVSPU"/g' src/cps2/driver.c || true
           sed -i 's/SDL_INIT_KEYBOARD/0/g' src/emumain.c || true
 
       - name: Compile
         run: |
-          # The ps2dev container already has $PS2DEV and $PS2SDK set.
-          # We just run make. If it fails, we check the Makefile's include lines.
+          # Now that paths are in GITHUB_PATH, ee-gcc will be found
           make clean
           make
 
@@ -45,27 +55,27 @@ jobs:
         run: |
           mkdir -p iso_root
           
-          # Find the ELF regardless of where the Makefile put it
+          # Find the ELF regardless of directory
           find . -name "*.elf" -exec cp {} iso_root/CPS2EMU.ELF \;
           
           if [ ! -f iso_root/CPS2EMU.ELF ]; then
-            echo "Build failed - No ELF generated"
+            echo "ERROR: ELF not found after build!"
             exit 1
           fi
 
-          # Add System Config
+          # Standard PS2 Boot Files
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
-          echo "VER = 1.0" >> iso_root/SYSTEM.CNF
+          echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # Add IRX drivers just in case SDL still looks for them
+          # IRX drivers for the SDL check bypass
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
           mkisofs -o avp_ps2.iso -R -J iso_root/
 
-      - name: Upload
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: PS2-AvP-Build
+          name: AvP-PS2-Build
           path: avp_ps2.iso
