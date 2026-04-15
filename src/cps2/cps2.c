@@ -103,18 +103,22 @@ static void cps2_run(void)
 --------------------------------------------------------*/
 void cps2_main(void)
 {
-    // --- 1. PS2 HARDWARE INITIALIZATION ---
-    // Mandatory to prevent the "Unknown device usbkbd" error
+    // --- PS2 HARDWARE BOOT SEQUENCE ---
     SifInitRpc(0);
     
-    // We load from CDROM0 because we are packaging into an ISO
-    SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
-    SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
+    // Try Uppercase (Standard ISO)
+    if (SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL) < 0) {
+        // Try Lowercase (Some mkisofs settings)
+        SifLoadModule("cdrom0:\\usbd.irx;1", 0, NULL);
+    }
 
-    // DELAY LOOP: Give the IOP processor time to register the USB devices
-    // before SDL tries to open them.
+    if (SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL) < 0) {
+        SifLoadModule("cdrom0:\\usbkbd.irx;1", 0, NULL);
+    }
+
+    // Increased Delay: Give the IOP more time to announce 'usbkbd' to the EE
     int i;
-    for(i = 0; i < 1000000; i++) { 
+    for(i = 0; i < 5000000; i++) { 
         __asm__("nop"); 
     }
 
