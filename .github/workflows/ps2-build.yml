@@ -32,40 +32,42 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Locate Toolchain
+          # 3. Setup PS2 Environment
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
           export PATH=$PATH:$PS2DEV/bin:$PS2DEV/ee/bin:$PS2SDK/bin
-          
-          EE_BIN=$PS2DEV/ee/bin/ee-gcc
-          EE_CXX=$PS2DEV/ee/bin/ee-g++
-          EE_AR=$PS2DEV/ee/bin/ee-ar
 
-          # 4. Clean and Build
-          # We manually override CC and EE_CC to fix the "D_EE: No such file" error
+          # 4. Patch Makefile to use absolute paths
+          # This stops the "D_EE: No such file" error by ensuring EE_CC is never empty
+          sed -i 's/EE_CC =/EE_CC ?=/g' Makefile || true
+          sed -i 's/EE_CXX =/EE_CXX ?=/g' Makefile || true
+
+          # 5. Clean and Build
+          # We explicitly pass the compiler location to the Makefile
           make clean || true
           
-          make \
-            CC="$EE_BIN" \
-            EE_CC="$EE_BIN" \
-            EE_CXX="$EE_CXX" \
-            EE_AR="$EE_AR" \
-            EE_LD="$EE_BIN" \
-            EE_AS="$PS2DEV/ee/bin/ee-as"
+          make -f Makefile \
+            CC=ee-gcc \
+            EE_CC=ee-gcc \
+            EE_CXX=ee-g++ \
+            EE_LD=ee-gcc \
+            EE_AR=ee-ar \
+            EE_OBJCPY=ee-objcopy \
+            EE_STRIP=ee-strip
 
       - name: Package ISO
         run: |
           mkdir -p iso_root
           
-          # Check if ELF was built
+          # Verification check
           if [ ! -f bin/cps2emu.elf ]; then
-            echo "ELF NOT FOUND! Build failed."
+            echo "BUILD FAILED: bin/cps2emu.elf not found."
             exit 1
           fi
           
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
           
-          # Download drivers
+          # Drivers for SDL Keyboard bypass
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
