@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <kernel.h>
+#include <sifrpc.h>
+#include <loadfile.h>
 
 SDL_Surface* real_screen;
 
@@ -257,49 +259,36 @@ void parse_cmd(int argc, char *argv[])
 	if(option_rescale >= 2) option_showfps = 0;
 }
 
-int main(int argc, char *argv[])
-{
-	atexit (Terminate);
+#include <kernel.h>
+#include <sifrpc.h>
+#include <loadfile.h>
 
-	//for ps2
-	int main_id = GetThreadId();
+int main(int argc, char *argv[]) {
+    // 1. Set Thread Priority
+    // Standard PS2 homebrew priority usually ranges from 60-100. 
+    // 72 is a solid choice for an emulator main loop.
+    int main_id = GetThreadId();
     ChangeThreadPriority(main_id, 72);
 
-	memset(game_name, 0, sizeof(game_name));
-	option_sound_enable = 1;
-	option_samplerate = 2;
-	option_sound_volume = 50;
-	option_controller = INPUT_PLAYER1;
-	option_speedlimit = 1;
-	option_frameskip = 0;
-	option_autoframeskip = 1;
-	option_rescale = 0;
-	option_showfps = 0;
-	option_m68k_clock = 100;
-	option_z80_clock = 100;
-	option_showfps = 0;
-	option_showtitle = 0;
-	option_screen_position = 32;
-	option_linescroll = 1;
-	option_fullcache = 1;
-	option_extinput = 0;
-	option_xorrom = 1;
-	option_tweak = 0;
-	option_cpuspeed = 0;
-	option_hiscore = 1;
+    // 2. Initialize Sif Services
+    SifInitRpc(0);
 
-	parse_cmd(argc, argv);
+    // 3. Load USB Drivers from ISO
+    // We load these to satisfy the SDL library's dependency check
+    SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
+    SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-	/* Initialize SDL */
-/* We removed SDL_INIT_JOYSTICK from the main init and will try to init it separately */
-/* because on some PS2 SDL ports, JOYSTICK and KEYBOARD are tied together */
-// Force SDL to use the "dummy" event driver so it doesn't look for a physical keyboard
-setenv("SDL_VIDEODRIVER", "ps2", 1);
-setenv("SDL_NOMOUSE", "1", 1);
-if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-    fprintf (stderr, "Couldn't initialize SDL: %s\n", SDL_GetError ());
-    // We only exit if Video/Audio fails
-    exit (1);
+    // 4. Initialize SDL
+    /* Use ONLY Video, Audio, and Joystick. 
+       Keyboard is "handled" by the IRX we just loaded. */
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+        fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+        // On PS2, exit(1) usually returns to the browser or uLaunchELF
+        exit(1);
+    }
+
+    /* Rest of your emulator startup... */
+    return 0;
 }
 
 /* Try to init Joystick separately so if it fails, the emu keeps running */
