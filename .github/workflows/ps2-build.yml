@@ -20,12 +20,11 @@ jobs:
           # cdrkit provides mkisofs for ISO creation
           apk update && apk add --no-cache build-base git curl cdrkit
 
-      - name: Fix Source and Compile
+      - name: Prepare Source and Compile
         run: |
-          # 1. Create directory structure
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
 
-          # 2. Download missing source files required by the Makefile
+          # 1. Download base engine files
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -33,18 +32,28 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # 3. Locate the toolchain dynamically
-          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
-          BIN_DIR=$(dirname "$EE_GCC_PATH")
-          export PATH="$BIN_DIR:$PATH"
-
-          # 4. Run make
-          make \
-            CC="$EE_GCC_PATH" \
-            EE_CC="$EE_GCC_PATH" \
-            EE_CXX="${BIN_DIR}/ee-g++" \
-            EE_AR="${BIN_DIR}/ee-ar" \
-            EE_LD="$EE_GCC_PATH"
+          # 2. FORCE HARDCODING VIA SED
+          # This replaces "megaman2" with "AVSPU" regardless of what's in the file
+          sed -i 's/"megaman2"/"AVSPU"/g' src/cps2/driver.c || true
+          sed -i 's/"megaman2"/"AVSPU"/g' src/emumain.c || true
+          
+          # 3. Setup PS2 Environment
+          export PS2DEV=/usr/local/ps2dev
+          export PS2SDK=$PS2DEV/ps2sdk
+          EE_BIN_DIR=$PS2DEV/ee/bin
+          
+          # 4. TRIPLE CLEAN
+          # Delete the specific object file to force a recompile of our hardcoded logic
+          rm -f src/cps2/cps2.o
+          make clean || true
+          
+          # 5. Build
+          make -f Makefile \
+            CC=$EE_BIN_DIR/ee-gcc \
+            EE_CC=$EE_BIN_DIR/ee-gcc \
+            EE_CXX=$EE_BIN_DIR/ee-g++ \
+            EE_LD=$EE_BIN_DIR/ee-gcc \
+            EE_AR=$EE_BIN_DIR/ee-ar
 
       - name: Package ISO with Drivers and ROM
         run: |
