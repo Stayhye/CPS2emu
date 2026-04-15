@@ -1,6 +1,7 @@
 /******************************************************************************
     cps2.c
-    CPS2 emulation core - Hardcoded for Alien vs. Predator (AVSPU)
+    CPS2 emulation core
+    Hardcoded for Alien vs. Predator (AVSPU) on PlayStation 2
 ******************************************************************************/
 
 #include <string.h>
@@ -23,7 +24,8 @@ static int cps2_init(void)
     hs_clear();
     if (option_hiscore) hs_open();
 #endif
-    // This will now look for the "AVSPU" driver definition
+    
+    // This will look for the driver matching game_name (AVSPU)
     cps2_driver_init();
 
     return cps2_video_init();
@@ -101,26 +103,36 @@ static void cps2_run(void)
 --------------------------------------------------------*/
 void cps2_main(void)
 {
-    // --- PS2 HARDWARE BOOT SEQUENCE ---
-    // 1. Set Thread Priority for stable emulation
-    int main_id = GetThreadId();
-    ChangeThreadPriority(main_id, 72);
-
-    // 2. Initialize SIF and Load Modules from ISO root
-    // Filenames must be UPPERCASE to match the ISO root
+    // --- 1. PS2 HARDWARE INITIALIZATION ---
+    // Mandatory to prevent the "Unknown device usbkbd" error
     SifInitRpc(0);
+    
+    // We load from CDROM0 because we are packaging into an ISO
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    // 3. Force the game name to the US version of AvP (Uppercase)
-    // The loader will look for AVSPU.ZIP on the CDROM
+    // DELAY LOOP: Give the IOP processor time to register the USB devices
+    // before SDL tries to open them.
+    int i;
+    for(i = 0; i < 1000000; i++) { 
+        __asm__("nop"); 
+    }
+
+    // --- 2. HARDCODE GAME IDENTITY ---
+    // Forces the emulator to skip MegaMan and load Alien vs. Predator (US)
     strcpy(game_name, "AVSPU");
+
+    // --- 3. THREAD MANAGEMENT ---
+    int main_id = GetThreadId();
+    ChangeThreadPriority(main_id, 72);
 
     Loop = LOOP_RESET;
     while (Loop >= LOOP_RESTART)
     {
         Loop = LOOP_EXEC;
+
         fatal_error = 0;
+
         video_clear_screen();
 
         if (memory_init())
