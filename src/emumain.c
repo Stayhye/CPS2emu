@@ -290,7 +290,15 @@ for(int i = 0; i < 100000; i++) { __asm__("nop"); }
     // 4. Initialize SDL
     /* Use ONLY Video, Audio, and Joystick. 
        Keyboard is "handled" by the IRX we just loaded. */
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+    /* Start ONLY Video and Audio. This usually bypasses the keyboard check. */
+if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+    fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
+    exit(1);
+}
+
+	/* Now that the app is running, try to add Joystick support separately. */
+	/* If this fails, the app won't exit, and you can still see the menu. */
+	SDL_InitSubSystem(SDL_INIT_JOYSTICK);
         fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
         // On PS2, exit(1) usually returns to the browser or uLaunchELF
         exit(1);
