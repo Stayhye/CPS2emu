@@ -52,10 +52,6 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-          # --- FIX: STRIP ELF FOR RAM OPTIMIZATION ---
-          # Essential for large ROMs like AvP (23MB)
-          ${BIN_DIR}/ee-strip bin/cps2emu.elf
-
       - name: Package ISO with IRX Bundle
         run: |
           mkdir -p iso_root
