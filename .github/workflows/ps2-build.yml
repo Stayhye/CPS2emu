@@ -1,86 +1,69 @@
 name: PS2 Build
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
 
 jobs:
   build-ps2:
     runs-on: ubuntu-latest
     container: ps2dev/ps2dev:latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Build Tools
+      - name: Install System Dependencies
         run: |
-          apk update
-          apk add --no-cache build-base git curl cdrkit
-
-      - name: Patch Code Errors
+          # cdrkit provides mkisofs for ISO creation
+          apk update && apk add --no-cache build-base git curl cdrkit
+      - name: Fix Source and Compile
         run: |
-          # 1. Inject tamtypes.h and MAX_PATH into main headers
-          find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#ifndef MAX_PATH\n#define MAX_PATH 260\n#endif' {} +
-          find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
+          # 1. Create directory structure
+          mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
+          # 2. Download missing source files required by the Makefile
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.h -o src/zip/zfile.h
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
+          curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
+          # 3. Locate the toolchain dynamically
+          EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
+          BIN_DIR=$(dirname "$EE_GCC_PATH")
+          export PATH="$BIN_DIR:$PATH"
+          # 4. Run make
+          make \
+            CC="$EE_GCC_PATH" \
+            EE_CC="$EE_GCC_PATH" \
+            EE_CXX="${BIN_DIR}/ee-g++" \
+            EE_AR="${BIN_DIR}/ee-ar" \
+            EE_LD="$EE_GCC_PATH"
+      - name: Package ISO with IRX Bundle
+        run: |
+          mkdir -p iso_root
           
-          # 2. Fix "zip/" vs "romconv/" mismatch (romconv is in root)
-          sed -i 's|zip/|romconv/|g' src/emumain.h
-          
-          # 3. Fix the sound pathing in cps2.h
-          # We remove the "sound/" prefix so the compiler uses our -Isrc/sound path
-          find src -name "cps2.h" -exec sed -i 's|sound/sndintrf.h|sndintrf.h|g' {} +
-          find src -name "cps2.h" -exec sed -i 's|sound/qsound.h|qsound.h|g' {} +
-
-      - name: Create Makefile
-        run: |
-          cat << 'EOF' > Makefile
-          EE_BIN = bin/cps2emu.elf
-          
-          # Explicit paths: romconv is in root, sound is in src/
-          EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
-                    romconv/unzip.o romconv/zfile.o \
-                    src/sound/qsound.o src/sound/sndintrf.o \
-                    src/cps2/state.o src/cps2/cache.o src/cps2/cps2.o src/cps2/cps2crpt.o \
-                    src/cps2/driver.o src/cps2/eeprom.o src/cps2/inptport.o src/cps2/memintrf.o \
-                    src/cps2/sprite.o src/cps2/timer.o src/cps2/vidhrdw.o src/cps2/loadrom.o \
-                    src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
-                    src/cpu/z80/cz80.o src/cpu/z80/z80.o
-
-          # Include paths:
-          # -I. covers romconv/ (if accessed as romconv/zfile.h)
-          # -Iromconv covers zfile.h
-          # -Isrc/sound covers sndintrf.h
-          EE_INCS = -I. -Isrc -Iromconv -Isrc/sound -Isrc/cps2 -I$(PS2SDK)/ports/include
-          EE_LDFLAGS = -L$(PS2SDK)/ports/lib
-          EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
-          EE_CFLAGS = -DSDL -std=gnu99 -G0 -O2
-
-          include $(PS2SDK)/samples/Makefile.pref
-          include $(PS2SDK)/samples/Makefile.eeglobal
-
-          all:
-          	mkdir -p bin
-          	$(MAKE) $(EE_BIN)
-
-          clean:
-          	rm -f $(EE_BIN) $(EE_OBJS)
-          EOF
-
-      - name: Build
-        run: |
-          export PS2DEV=/usr/local/ps2dev
-          export PS2SDK=$PS2DEV/ps2sdk
-          export PATH=$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PATH
-          make clean
-          make
-
-      - name: Package ISO
-        run: |
-          mkdir -p iso_root/ROMS
-          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/audsrv/irx/audsrv.irx -o iso_root/AUDSRV.IRX
+          # 1. Copy the compiled ELF to the ISO root
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          printf "BOOT2 = cdrom0:\\\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
+          
+          # 2. Download the required IRX files to satisfy SDL keyboard dependencies
+          # We use curl because these aren't always in the standard Docker IRX folder
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
+          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
+          
+          # 3. Create the SYSTEM.CNF (Boot instructions)
+          echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
+          echo "VER = 1.00" >> iso_root/SYSTEM.CNF
+          echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
+          
+          # 4. Generate the final ISO image
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
-
-      - name: Upload Artifact
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CPS2-PS2-ISO
-          path: bin/cps2emu.iso
+          name: CPS2emu-PS2-ISO-Package
+          path: |
+            bin/cps2emu.elf
+            bin/cps2emu.iso
