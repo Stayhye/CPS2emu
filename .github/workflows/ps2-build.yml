@@ -14,34 +14,24 @@ jobs:
           apk update
           apk add --no-cache build-base git curl cdrkit
 
-      - name: Patch Source Code
+      - name: Patch Code Errors
         run: |
-          # 1. Inject tamtypes.h and MAX_PATH at the very top of headers
+          # Inject tamtypes.h and MAX_PATH into the main header
           find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#ifndef MAX_PATH\n#define MAX_PATH 260\n#endif' {} +
           find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
           
-          # 2. Harmonize paths to use the folder prefixes consistently
-          # This ensures #include "zfile.h" becomes #include "romconv/zfile.h" 
-          # so it matches our directory structure.
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"zfile.h"|"romconv/zfile.h"|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"unzip.h"|"romconv/unzip.h"|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"sndintrf.h"|"sound/sndintrf.h"|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"qsound.h"|"sound/qsound.h"|g' {} +
-
-          # 3. Specific fix for the "zip/" vs "romconv/" mismatch in emumain.h
-          sed -i 's|zip/zfile.h|romconv/zfile.h|g' src/emumain.h
-          sed -i 's|zip/unzip.h|romconv/unzip.h|g' src/emumain.h
-
-          # 4. Remove DS3/DS4 references
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/[Dd][Ss][34]/d' {} +
+          # Fix the specific include in emumain.h that was looking for zip/
+          # We change it to look for romconv/ instead
+          sed -i 's|zip/|romconv/|g' src/emumain.h
 
       - name: Create Makefile
         run: |
           cat << 'EOF' > Makefile
           EE_BIN = bin/cps2emu.elf
           
+          # Objects found in both src/ and romconv/
           EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
-                    src/romconv/unzip.o src/romconv/zfile.o \
+                    romconv/unzip.o romconv/zfile.o \
                     src/sound/qsound.o src/sound/sndintrf.o \
                     src/cps2/state.o src/cps2/cache.o src/cps2/cps2.o src/cps2/cps2crpt.o \
                     src/cps2/driver.o src/cps2/eeprom.o src/cps2/inptport.o src/cps2/memintrf.o \
@@ -49,9 +39,8 @@ jobs:
                     src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
                     src/cpu/z80/cz80.o src/cpu/z80/z80.o
 
-          # The -I. is critical so the compiler can find "src/romconv/..." 
-          # when a file in "src/" asks for it.
-          EE_INCS = -I. -Isrc -Isrc/cps2 -Isrc/romconv -Isrc/sound -Isrc/cpu/m68000 -Isrc/cpu/z80 -I$(PS2SDK)/ports/include
+          # Added -Iromconv and -I. (root) so the compiler finds everything
+          EE_INCS = -I. -Isrc -Iromconv -Isrc/sound -Isrc/cps2 -I$(PS2SDK)/ports/include
           EE_LDFLAGS = -L$(PS2SDK)/ports/lib
           EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
           EE_CFLAGS = -DSDL -std=gnu99 -G0 -O2
