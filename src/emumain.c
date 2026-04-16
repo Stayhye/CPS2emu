@@ -1,7 +1,3 @@
-/*****************************************************************************
-    emumain.c - PS2 Port with CDROM and Sound Fixes
-******************************************************************************/
-
 #include "emumain.h"
 #include "inptport.h"
 #include "getopt.h"
@@ -18,115 +14,65 @@
 #include <sifrpc.h>
 #include <loadfile.h>
 
-SDL_Surface* real_screen;
-
-#define EMULATOR_TITLE      "CPS2EMU for PS2"
-#define FRAMESKIP_LEVELS    12
-#define TICKS_PER_SEC       1000000UL
-#define TICKS_PER_FRAME     (TICKS_PER_SEC / FPS)
-
-/******************************************************************************
-    Global variables
-******************************************************************************/
-char game_name[16];
-char parent_name[16];
-char cache_parent_name[16];
-
-// ROMs and cache targeted for the PS2 CD-ROM and memory card/mass
+/* Global Configuration */
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
-char cache_dir[MAX_PATH] = "./cache";
+char cache_dir[MAX_PATH] = "mc0:/CPS2CACHE"; // Redirected to Memory Card
 
-int option_showfps;
-int option_showtitle;
-int option_speedlimit;
-int option_autoframeskip;
-int option_frameskip;
-int option_rescale;
-int option_screen_position;
-int option_linescroll;
-int option_fullcache;
-int option_extinput;
-int option_xorrom;
-int option_tweak;
-int option_cpuspeed;
-int option_hiscore;
-
-int option_sound_enable;
-int option_samplerate;
-int option_sound_volume;
-
-int option_m68k_clock;
-int option_z80_clock;
-
-int machine_driver_type;
-int machine_init_type;
-int machine_input_type;
-int machine_screen_type;
-int machine_sound_type;
-
-u32 frames_displayed;
-int fatal_error;
-volatile int Loop;
-char launchDir[MAX_PATH] = {0, };
-
-int state_slot = 0;
-int service_mode = 0;
-int menu_mode = 0;
-u8 *upper_memory = NULL;
-u16 *work_frame = NULL;
-
-static SDL_Surface *screen_surface = NULL;
-static u16 *screen = NULL;
-
-/******************************************************************************
-    PS2 Module Initialization
-******************************************************************************/
+/* PS2 Module Loading */
 void ps2_init_modules() {
     SifInitRpc(0);
 
-    // Initialize the IOP and load core sound/USB modules
+    // Initialize the IOP and load modules from CDROM
+    // Note: Filenames on ISO are typically UPPERCASE
     SifLoadModule("rom0:LIBSD", 0, NULL);
     
-    // External IRX drivers loaded from the disc
     if (SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL) < 0) {
-        printf("Failed to load AUDSRV.IRX\n");
+        printf("Error: Could not load AUDSRV.IRX\n");
     }
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    nopdelay();
+    // Give the IOP time to settle after loading modules
+    int i;
+    for(i = 0; i < 100000; i++) { __asm__("nop"); }
 }
 
-/******************************************************************************
-    Main Entry Point
-******************************************************************************/
 int main(int argc, char *argv[]) {
+    // Elevate thread priority for emulation stability
     int main_id = GetThreadId();
     ChangeThreadPriority(main_id, 72);
 
+    // Initialize PS2 Hardware Services
     ps2_init_modules();
 
+    // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
         printf("SDL_Init Failed: %s\n", SDL_GetError());
         return -1;
     }
 
+    // Disable keyboard events to prevent polling-related overhead/crashes
     SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
     SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 
-    screen_surface = SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
-    if (screen_surface == NULL) {
+    // Set 16-bit Video Mode (320x240 is CPS2 Native)
+    SDL_Surface* screen = SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
+    if (screen == NULL) {
         return -1;
     }
     SDL_ShowCursor(SDL_DISABLE);
 
+    // Setup Joysticks
     if (SDL_NumJoysticks() > 0) {
         SDL_JoystickOpen(0);
     }
 
-    upper_memory = (u8 *)malloc(CACHE_SIZE);
-    work_frame = (u16 *)memalign(64, BUF_WIDTH * BUF_HEIGHT * 2);
+    // Allocate core emulation buffers
+    // upper_memory is used for ROM caching
+    extern u8 *upper_memory;
+    upper_memory = (u8 *)malloc(1024 * 1024 * 4); // 4MB buffer example
 
+    // Enter CPS2 Core
     cps2_main();
 
     return 0;
