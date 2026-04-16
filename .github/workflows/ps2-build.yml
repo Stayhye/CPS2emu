@@ -16,25 +16,21 @@ jobs:
 
       - name: Patch Source Code
         run: |
-          # 1. Inject tamtypes.h and MAX_PATH
+          # 1. Inject tamtypes.h and MAX_PATH at the very top of headers
           find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#ifndef MAX_PATH\n#define MAX_PATH 260\n#endif' {} +
           find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
           
-          # 2. Fix Includes Project-Wide
-          # We search for the common "sound/" and "zip/" or "romconv/" strings 
-          # and ensure they are absolute relative to the 'src' directory.
-          # We use -Isrc in the Makefile, so removing the subdirectory prefix 
-          # from the include statement allows the compiler to find them via the include paths.
-          
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/zfile.h|zfile.h|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/unzip.h|unzip.h|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|romconv/zfile.h|zfile.h|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|romconv/unzip.h|unzip.h|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|sound/sndintrf.h|sndintrf.h|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|sound/qsound.h|qsound.h|g' {} +
+          # 2. Harmonize paths to use the folder prefixes consistently
+          # This ensures #include "zfile.h" becomes #include "romconv/zfile.h" 
+          # so it matches our directory structure.
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"zfile.h"|"romconv/zfile.h"|g' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"unzip.h"|"romconv/unzip.h"|g' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"sndintrf.h"|"sound/sndintrf.h"|g' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"qsound.h"|"sound/qsound.h"|g' {} +
 
-          # 3. Final safety check: if a file still includes "zfile.h" or "sndintrf.h" 
-          # without a path, our Makefile's -I flags will now handle it.
+          # 3. Specific fix for the "zip/" vs "romconv/" mismatch in emumain.h
+          sed -i 's|zip/zfile.h|romconv/zfile.h|g' src/emumain.h
+          sed -i 's|zip/unzip.h|romconv/unzip.h|g' src/emumain.h
 
           # 4. Remove DS3/DS4 references
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/[Dd][Ss][34]/d' {} +
@@ -53,9 +49,9 @@ jobs:
                     src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
                     src/cpu/z80/cz80.o src/cpu/z80/z80.o
 
-          # By including every subfolder, #include "sndintrf.h" will work 
-          # no matter which file is calling it.
-          EE_INCS = -Isrc -Isrc/cps2 -Isrc/romconv -Isrc/sound -Isrc/cpu/m68000 -Isrc/cpu/z80 -I$(PS2SDK)/ports/include
+          # The -I. is critical so the compiler can find "src/romconv/..." 
+          # when a file in "src/" asks for it.
+          EE_INCS = -I. -Isrc -Isrc/cps2 -Isrc/romconv -Isrc/sound -Isrc/cpu/m68000 -Isrc/cpu/z80 -I$(PS2SDK)/ports/include
           EE_LDFLAGS = -L$(PS2SDK)/ports/lib
           EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
           EE_CFLAGS = -DSDL -std=gnu99 -G0 -O2
