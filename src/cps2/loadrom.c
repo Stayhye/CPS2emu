@@ -98,7 +98,7 @@ void file_close(void)
 
 int file_read(void *buf, size_t length)
 {
-    if (rom_fd != -1)
+    if (rom_fd != -1 && buf != NULL)
         return zread(rom_fd, buf, length);
     return -1;
 }
@@ -120,22 +120,20 @@ FILE* cachefile_open(void)
     char path[MAX_PATH];
     FILE* cache_fd;
 
-    // We ignore the global cache_dir and force mc1:
     sprintf(path, "mc1:/%s.CACHE", game_name);
     force_upper(path);
     
-    // Debug print for PCSX2 log
     printf("CPS2EMU: Attempting cache load from %s\n", path);
 
-    if ((cache_fd = fopen(path, "rb")) != NULL)
-        return cache_fd;
+    cache_fd = fopen(path, "rb");
+    if (cache_fd != NULL) return cache_fd;
 
     if (cache_parent_name[0])
     {
         sprintf(path, "mc1:/%s.CACHE", cache_parent_name);
         force_upper(path);
-        if ((cache_fd = fopen(path, "rb")) != NULL)
-            return cache_fd;
+        cache_fd = fopen(path, "rb");
+        if (cache_fd != NULL) return cache_fd;
     }
 
     return NULL;
@@ -143,19 +141,28 @@ FILE* cachefile_open(void)
 #endif
 
 /*--------------------------------------------------------
-    ROM Loading Core
+    ROM Loading Core - WITH TLB MISS PROTECTION
 --------------------------------------------------------*/
 
 int rom_load(struct rom_t *rom, u8 *mem, int idx, int max)
 {
     u32 offset, length;
 
+    // --- CRITICAL PROTECTION ---
+    // If mem is NULL or pointing to kernel space (low memory), abort.
+    if (mem == NULL || (u32)mem < 0x00100000) {
+        printf("CPS2EMU FATAL: rom_load received invalid memory pointer: 0x%08X\n", (u32)mem);
+        return max; // Return max to stop the loop
+    }
+
 _continue:
     offset = rom[idx].offset;
 
     if (rom[idx].skip == 0)
     {
-        file_read(&mem[offset], rom[idx].length);
+        if (file_read(&mem[offset], rom[idx].length) < 0) {
+             printf("CPS2EMU: Error reading rom at index %d\n", idx);
+        }
         if (rom[idx].type == ROM_WORDSWAP)
             swab(&mem[offset], &mem[offset], rom[idx].length);
     }
@@ -173,7 +180,7 @@ _continue:
             while (length < rom[idx].length)
             {
                 if ((c = file_getc()) == EOF) break;
-                mem[offset] = c;
+                mem[offset] = (u8)c;
                 offset += skip;
                 length++;
             }
@@ -183,9 +190,9 @@ _continue:
             while (length < rom[idx].length)
             {
                 if ((c = file_getc()) == EOF) break;
-                mem[offset + 0] = c;
+                mem[offset + 0] = (u8)c;
                 if ((c = file_getc()) == EOF) break;
-                mem[offset + 1] = c;
+                mem[offset + 1] = (u8)c;
                 offset += skip;
                 length += 2;
             }
