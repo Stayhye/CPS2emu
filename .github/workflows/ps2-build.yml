@@ -17,14 +17,15 @@ jobs:
 
       - name: Install System Dependencies
         run: |
+          # cdrkit provides mkisofs for ISO creation
           apk update && apk add --no-cache build-base git curl cdrkit
 
       - name: Fix Source and Compile
         run: |
           # 1. Create directory structure
           mkdir -p src/zip src/sound src/cps2 src/cpu/m68000 src/cpu/z80 bin
-          
-          # 2. Download missing source files
+
+          # 2. Download missing source files required by the Makefile
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.c -o src/zip/unzip.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/unzip.h -o src/zip/unzip.h
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/zip/zfile.c -o src/zip/zfile.c
@@ -32,20 +33,18 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.c -o src/sound/sndintrf.c
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
-          # --- CASE SENSITIVITY PATCH ---
-          # This finds all .c and .h files in the src folder and subfolders 
-          # and replaces the lowercase filenames with uppercase ones.
+          # --- FIX: PATCH CODE FOR CASE SENSITIVE CD-ROM ---
+          # This ensures the code looks for ROMINFO.CPS2 instead of rominfo.cps2
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"rominfo.cps2"/"ROMINFO.CPS2"/g' {} +
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"zipname.cps2"/"ZIPNAME.CPS2"/g' {} +
-          # ------------------------------
+          # ------------------------------------------------
 
-          # 3. Locate the toolchain
+          # 3. Locate the toolchain dynamically
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
           export PATH="$BIN_DIR:$PATH"
-          
+
           # 4. Run make
-          # We pass the full paths to the compiler tools
           make \
             CC="$EE_GCC_PATH" \
             EE_CC="$EE_GCC_PATH" \
@@ -53,14 +52,9 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-          # 5. Strip the ELF using the full path
-          # This is critical to save RAM for AvP (23MB ROM)
-          if [ -f bin/cps2emu.elf ]; then
-            "${BIN_DIR}/ee-strip" bin/cps2emu.elf
-          else
-            echo "Error: bin/cps2emu.elf not found. Build likely failed."
-            exit 1
-          fi
+          # --- FIX: STRIP ELF FOR RAM OPTIMIZATION ---
+          # Essential for large ROMs like AvP (23MB)
+          ${BIN_DIR}/ee-strip bin/cps2emu.elf
 
       - name: Package ISO with IRX Bundle
         run: |
@@ -69,21 +63,22 @@ jobs:
           # 1. Copy the compiled ELF to the ISO root
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
           
-          # 2. Add the ROM database and rename it to Uppercase
-          # If it exists in your repo, copy it. Otherwise, it will use the one you added for AVP.
-          cp rominfo.cps2 iso_root/ROMINFO.CPS2 || touch iso_root/ROMINFO.CPS2
-          cp zipname.cps2 iso_root/ZIPNAME.CPS2 || touch iso_root/ZIPNAME.CPS2
+          # --- FIX: INCLUDE AND RENAME ROM DATABASE ---
+          # Copy the local rominfo.cps2 to the ISO as uppercase
+          [ -f rominfo.cps2 ] && cp rominfo.cps2 iso_root/ROMINFO.CPS2
+          [ -f zipname.cps2 ] && cp zipname.cps2 iso_root/ZIPNAME.CPS2
+          # --------------------------------------------
           
-          # 3. Download IRX files
+          # 2. Download the required IRX files
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 4. Create the SYSTEM.CNF
+          # 3. Create the SYSTEM.CNF (Boot instructions)
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 5. Generate ISO (Adding -f to follow symlinks if any)
+          # 4. Generate the final ISO image
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
       - name: Upload Artifacts
