@@ -842,7 +842,8 @@ int load_rom_info(const char *game_name)
 
 	num_gfx1rom = 0;
 
-  sprintf(path, "%s/config/rominfo.cps2", launchDir);
+  // Force the emulator to look at the CD-ROM config folder
+sprintf(path, "cdrom0:\\CONFIG\\ROMINFO.CPS2;1");
 	if ((fp = fopen(path, "r")) != NULL)
 	{
 		while (fgets(buf, 255, fp))
