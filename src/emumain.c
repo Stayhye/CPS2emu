@@ -79,7 +79,7 @@ static SDL_Surface *screen_surface = NULL;
 static u16 *screen = NULL;
 
 /******************************************************************************
-    PS2 Module Initialization
+    PS2 Module Initialization (Fixes SifBindRpc/Sound)
 ******************************************************************************/
 void ps2_init_modules() {
     SifInitRpc(0);
@@ -87,7 +87,7 @@ void ps2_init_modules() {
     // Initialize the IOP and load core sound/USB modules
     SifLoadModule("rom0:LIBSD", 0, NULL);
     
-    // Load external drivers from the Disc
+    // Load external drivers from the Disc - Must be UPPERCASE on ISO
     if (SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL) < 0) {
         printf("Failed to load AUDSRV.IRX\n");
     }
