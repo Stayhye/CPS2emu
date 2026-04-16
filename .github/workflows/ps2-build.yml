@@ -89,6 +89,21 @@ jobs:
               exit(1)
           "
 
+      - name: Hardcode PS2 Paths
+        run: |
+          # Force the emulator to look at the CD-ROM and Memory Card, ignoring 'host:/'
+          
+          # Fix Game Directory
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/roms"/"cdrom0:\\\\ROMS"/g' {} +
+          
+          # Fix Cache Directory (Pointing to Memory Card Slot 2)
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/cache"/"mc1:"/g' {} +
+          
+          # Fix Config/Database Directory
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/config"/"cdrom0:"/g' {} +
+          find src -type f -name "*.c" -exec sed -i 's/config\/rominfo.cps2/ROMINFO.CPS2/g' {} +
+          find src -type f -name "*.c" -exec sed -i 's/config\/zipname.cps2/ZIPNAME.CPS2/g' {} +
+
       - name: Package ISO with IRX Bundle
         run: |
           mkdir -p iso_root
