@@ -50,6 +50,20 @@ jobs:
           BIN_DIR=$(dirname "$EE_GCC_PATH")
           export PATH="$BIN_DIR:$PATH"
 
+      - name: Force Hardware Paths in Source
+        run: |
+          # 1. Replace relative ./cache with mc1:
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"\.\/cache"/"mc1:"/g' {} +
+          
+          # 2. Replace relative ./roms with cdrom0:\ROMS
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"\.\/roms"/"cdrom0:\\\\ROMS"/g' {} +
+          
+          # 3. Replace relative ./config with cdrom0:
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"\.\/config"/"cdrom0:"/g' {} +
+          
+          # 4. Fix the specific rominfo.cps2 path seen in your logs
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/config\/rominfo.cps2/ROMINFO.CPS2/g' {} +
+
           # 4. Run make
           make \
             CC="$EE_GCC_PATH" \
