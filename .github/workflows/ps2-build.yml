@@ -50,6 +50,37 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
+      - name: Pattern Patch USBKBD Hang
+        run: |
+          python3 -c "
+          import os
+
+          # The specific byte sequence you provided
+          # 10 00 BF FF 9C 18 05 0C 00 00 B0 FF
+          SEARCH = bytes.fromhex('1000BFFF9C18050C0000B0FF')
+          
+          # We replace it with the same pattern but NOP out the middle logic
+          # MIPS NOP is 00 00 00 00
+          REPLACE = bytes.fromhex('1000BFFF000000000000B0FF')
+
+          file_path = 'bin/cps2emu.elf'
+          if os.path.exists(file_path):
+              with open(file_path, 'rb') as f:
+                  data = f.read()
+              
+              if SEARCH in data:
+                  # Replace the first occurrence found
+                  new_data = data.replace(SEARCH, REPLACE, 1)
+                  with open(file_path, 'wb') as f:
+                      f.write(new_data)
+                  print('Success: USBKBD hang pattern found and patched via Opcode.')
+              else:
+                  print('Warning: Opcode pattern not found! Code may have shifted significantly.')
+          else:
+              print('Error: bin/cps2emu.elf not found.')
+              exit(1)
+          "
+
       - name: Package ISO with IRX Bundle
         run: |
           mkdir -p iso_root
