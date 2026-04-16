@@ -108,18 +108,7 @@ jobs:
               print('Error: bin/cps2emu.elf not found.')
               exit(1)
           "
-      - name: Hex Patch Binary Paths
-        run: |
-          # Replace 'host:/config/rominfo.cps2' with 'cdrom0:ROMINFO.CPS2'
-          # We use \x00 (null bytes) to pad the string so the file size doesn't change
-          sed -i 's|host:/config/rominfo\.cps2|cdrom0:ROMINFO.CPS2\x00\x00\x00\x00\x00|g' bin/cps2emu.elf
           
-          # Replace './cache' with 'mc1:'
-          sed -i 's|\./cache|mc1:\x00\x00\x00\x00|g' bin/cps2emu.elf
-          
-          # Replace './roms' with 'cdrom0:ROMS'
-          sed -i 's|\./roms|cdrom0:ROMS|g' bin/cps2emu.elf
-
       - name: Hardcode PS2 Paths
         run: |
           # Force the emulator to look at the CD-ROM and Memory Card, ignoring 'host:/'
