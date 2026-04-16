@@ -1,5 +1,5 @@
 /*****************************************************************************
-    emumain.c - Unified PS2 Port
+    emumain.c - PS2 Port with CDROM and Sound Fixes
 ******************************************************************************/
 
 #include "emumain.h"
@@ -32,7 +32,7 @@ char game_name[16];
 char parent_name[16];
 char cache_parent_name[16];
 
-// Updated to point specifically to CDROM for PS2
+// Updated for CD-ROM usage
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
 char cache_dir[MAX_PATH] = "./cache";
 
@@ -79,57 +79,64 @@ static SDL_Surface *screen_surface = NULL;
 static u16 *screen = NULL;
 
 /******************************************************************************
-    PS2 Module Loading (Fixes SifBindRpc and SDL Crashes)
+    PS2 Module Initialization
 ******************************************************************************/
 void ps2_init_modules() {
     SifInitRpc(0);
 
-    // Load sound libraries from ROM and CDROM
+    // Initialize the IOP and load core sound/USB modules
     SifLoadModule("rom0:LIBSD", 0, NULL);
+    
+    // Load external drivers from the Disc
     if (SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL) < 0) {
         printf("Failed to load AUDSRV.IRX\n");
     }
-
-    // Load USB drivers to satisfy SDL internal keyboard checks
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    // Give the IOP a moment to initialize the RPC services
-    int i;
-    for(i = 0; i < 1000000; i++) { __asm__("nop"); }
+    // Small delay to let IOP services settle
+    nopdelay();
 }
 
 /******************************************************************************
     Main Entry Point
 ******************************************************************************/
 int main(int argc, char *argv[]) {
-    // 1. Thread Priority
+    // 1. Thread Setup
     int main_id = GetThreadId();
     ChangeThreadPriority(main_id, 72);
 
-    // 2. Initialize IOP Modules (Must be before SDL_Init)
+    // 2. IOP Setup (Crucial for SifBindRpc)
     ps2_init_modules();
 
-    // 3. Initialize SDL with specific PS2 constraints
+    // 3. SDL Initialization
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
-        printf("SDL_Init Error: %s\n", SDL_GetError());
+        printf("SDL_Init Failed: %s\n", SDL_GetError());
         return -1;
     }
 
-    // Force SDL to ignore keyboard to prevent polling missing hardware
+    // Ignore keyboard to prevent polling crashes
     SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
     SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 
-    // 4. Video Mode
+    // 4. Video Mode Setup
     screen_surface = SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
     if (screen_surface == NULL) {
         return -1;
     }
     SDL_ShowCursor(SDL_DISABLE);
 
-    // 5. Initialize Joystick (DualShock 2)
+    // 5. Joystick Setup
     if (SDL_NumJoysticks() > 0) {
         SDL_JoystickOpen(0);
     }
 
-    //
+    // 6. Memory Allocation
+    upper_memory = (u8 *)malloc(CACHE_SIZE);
+    work_frame = (u16 *)memalign(64, BUF_WIDTH * BUF_HEIGHT * 2);
+
+    // 7. Core Execution
+    cps2_main();
+
+    return 0;
+}
