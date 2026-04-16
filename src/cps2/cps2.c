@@ -10,6 +10,10 @@
 #include <loadfile.h>
 #include "cps2.h"
 
+// External variables used by the engine for pathing
+extern char launchDir[MAX_PATH];
+extern char cache_dir[MAX_PATH];
+
 void cps2_main(void)
 {
     // --- 1. IOP & RPC RESET ---
@@ -17,6 +21,10 @@ void cps2_main(void)
     
     // Load fundamental sound library from PS2 ROM
     SifLoadModule("rom0:LIBSD", 0, NULL);
+
+    // --- NEW: LOAD MEMORY CARD DRIVERS FOR MC1: CACHE ---
+    SifLoadModule("rom0:MCMAN", 0, NULL);
+    SifLoadModule("rom0:MCSERV", 0, NULL);
     
     // --- 2. MODULE LOADING ---
     // audsrv MUST be loaded before sound_init() or SifBindRpc will fail
@@ -30,6 +38,13 @@ void cps2_main(void)
     // Give the IOP time to settle and register the RPC services
     int i;
     for(i = 0; i < 6000000; i++) { __asm__("nop"); }
+
+    // --- NEW: FORCE HARDWARE PATHS ---
+    // This stops the "host:/" hang and moves cache to Memory Card Slot 2
+    strcpy(launchDir, "cdrom0:\\");
+    strcpy(cache_dir, "mc1:");
+    printf("[PS2] Launch Dir forced to: %s\n", launchDir);
+    printf("[PS2] Cache Dir forced to: %s\n", cache_dir);
 
     strcpy(game_name, "AVSPU");
 
