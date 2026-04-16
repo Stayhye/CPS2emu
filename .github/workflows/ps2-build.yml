@@ -14,14 +14,51 @@ jobs:
           apk update
           apk add --no-cache build-base git curl cdrkit
 
+      - name: Patch Source Code
+        run: |
+          # 1. Fix 'u32/u8' errors by injecting tamtypes.h into main headers
+          sed -i '1i #include <tamtypes.h>' src/emumain.h
+          sed -i '1i #include <tamtypes.h>' src/emudraw.h
+          
+          # 2. Fix the "zip/zfile.h" pathing issue
+          # This replaces #include "zip/zfile.h" with #include "zfile.h" 
+          # so the -Isrc/zip flag in the Makefile works perfectly.
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/zfile.h|zfile.h|g' {} +
+
+      - name: Create Makefile
+        run: |
+          cat << 'EOF' > Makefile
+          EE_BIN = bin/cps2emu.elf
+          EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
+                    src/zip/unzip.o src/zip/zfile.o src/sound/qsound.o src/sound/sndintrf.o \
+                    src/cps2/state.o src/cps2/cache.o src/cps2/cps2.o src/cps2/cps2crpt.o \
+                    src/cps2/driver.o src/cps2/eeprom.o src/cps2/inptport.o src/cps2/memintrf.o \
+                    src/cps2/sprite.o src/cps2/timer.o src/cps2/vidhrdw.o src/cps2/loadrom.o \
+                    src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
+                    src/cpu/z80/cz80.o src/cpu/z80/z80.o
+
+          # Include paths that cover all subfolders
+          EE_INCS = -Isrc -Isrc/zip -Isrc/cps2 -Isrc/sound -I$(PS2SDK)/ports/include
+          EE_LDFLAGS = -L$(PS2SDK)/ports/lib
+          EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
+          EE_CFLAGS = -DSDL -std=gnu99 -G0 -O2
+
+          include $(PS2SDK)/samples/Makefile.pref
+          include $(PS2SDK)/samples/Makefile.eeglobal
+
+          all:
+          	mkdir -p bin
+          	$(MAKE) $(EE_BIN)
+
+          clean:
+          	rm -f $(EE_BIN) $(EE_OBJS)
+          EOF
+
       - name: Build
         run: |
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
           export PATH=$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PATH
-          
-          # Force clean and build
-          mkdir -p bin
           make clean
           make
 
@@ -30,7 +67,7 @@ jobs:
           mkdir -p iso_root/ROMS
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/audsrv/irx/audsrv.irx -o iso_root/AUDSRV.IRX
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          printf "BOOT2 = cdrom0:\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
+          printf "BOOT2 = cdrom0:\\\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
       - name: Upload
