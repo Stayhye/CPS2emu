@@ -17,8 +17,7 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          # cdrkit provides mkisofs for ISO creation
-          apk update && apk add --no-cache build-base git curl cdrkit
+          apk update && apk add --no-cache build-base git curl cdrkit python3
 
       - name: Fix Source and Compile
         run: |
@@ -34,7 +33,6 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
           # --- FIX: PATCH CODE FOR CASE SENSITIVE CD-ROM ---
-          # This ensures the code looks for ROMINFO.CPS2 instead of rominfo.cps2
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"rominfo.cps2"/"ROMINFO.CPS2"/g' {} +
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"zipname.cps2"/"ZIPNAME.CPS2"/g' {} +
           # ------------------------------------------------
@@ -52,29 +50,39 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
+      - name: Hex Patch USBKBD Hang
+        run: |
+          # Patching address 0x001465F8 with NOP (00 00 00 00)
+          # Assuming file offset is 0x465F8 based on standard ELF header
+          python3 -c "
+          import os
+          file_path = 'bin/cps2emu.elf'
+          if os.path.exists(file_path):
+              with open(file_path, 'r+b') as f:
+                  f.seek(0x465F8)
+                  f.write(b'\x00\x00\x00\x00')
+              print('Successfully patched USBKBD hang at offset 0x465F8')
+          else:
+              print('ELF not found, skipping patch')
+              exit(1)
+          "
+
       - name: Package ISO with IRX Bundle
         run: |
           mkdir -p iso_root
-          
-          # 1. Copy the compiled ELF to the ISO root
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
           
           # --- FIX: INCLUDE AND RENAME ROM DATABASE ---
-          # Copy the local rominfo.cps2 to the ISO as uppercase
           [ -f rominfo.cps2 ] && cp rominfo.cps2 iso_root/ROMINFO.CPS2
           [ -f zipname.cps2 ] && cp zipname.cps2 iso_root/ZIPNAME.CPS2
-          # --------------------------------------------
           
-          # 2. Download the required IRX files
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
-          # 3. Create the SYSTEM.CNF (Boot instructions)
           echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1" > iso_root/SYSTEM.CNF
           echo "VER = 1.00" >> iso_root/SYSTEM.CNF
           echo "VMODE = NTSC" >> iso_root/SYSTEM.CNF
           
-          # 4. Generate the final ISO image
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
       - name: Upload Artifacts
