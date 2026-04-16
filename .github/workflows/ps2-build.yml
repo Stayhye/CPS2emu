@@ -16,20 +16,24 @@ jobs:
 
       - name: Patch Code Errors
         run: |
-          # Inject tamtypes.h and MAX_PATH into the main header
+          # 1. Inject tamtypes.h and MAX_PATH into main headers
           find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#ifndef MAX_PATH\n#define MAX_PATH 260\n#endif' {} +
           find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
           
-          # Fix the specific include in emumain.h that was looking for zip/
-          # We change it to look for romconv/ instead
+          # 2. Fix "zip/" vs "romconv/" mismatch (romconv is in root)
           sed -i 's|zip/|romconv/|g' src/emumain.h
+          
+          # 3. Fix the sound pathing in cps2.h
+          # We remove the "sound/" prefix so the compiler uses our -Isrc/sound path
+          find src -name "cps2.h" -exec sed -i 's|sound/sndintrf.h|sndintrf.h|g' {} +
+          find src -name "cps2.h" -exec sed -i 's|sound/qsound.h|qsound.h|g' {} +
 
       - name: Create Makefile
         run: |
           cat << 'EOF' > Makefile
           EE_BIN = bin/cps2emu.elf
           
-          # Objects found in both src/ and romconv/
+          # Explicit paths: romconv is in root, sound is in src/
           EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
                     romconv/unzip.o romconv/zfile.o \
                     src/sound/qsound.o src/sound/sndintrf.o \
@@ -39,7 +43,10 @@ jobs:
                     src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
                     src/cpu/z80/cz80.o src/cpu/z80/z80.o
 
-          # Added -Iromconv and -I. (root) so the compiler finds everything
+          # Include paths:
+          # -I. covers romconv/ (if accessed as romconv/zfile.h)
+          # -Iromconv covers zfile.h
+          # -Isrc/sound covers sndintrf.h
           EE_INCS = -I. -Isrc -Iromconv -Isrc/sound -Isrc/cps2 -I$(PS2SDK)/ports/include
           EE_LDFLAGS = -L$(PS2SDK)/ports/lib
           EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
@@ -72,7 +79,7 @@ jobs:
           printf "BOOT2 = cdrom0:\\\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
-      - name: Upload
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CPS2-PS2-ISO
