@@ -11,12 +11,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install System Dependencies
+      - name: Install Build Tools
         run: |
           apk update
           apk add --no-cache build-base git curl cdrkit
 
-      - name: Compile Project
+      - name: Build Project
         run: |
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
@@ -29,22 +29,18 @@ jobs:
       - name: Package ISO
         run: |
           mkdir -p iso_root/ROMS
-          
-          # Fetch required IRX modules for sound and USB
+          # Fetch AUDSRV for sound support
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/audsrv/irx/audsrv.irx -o iso_root/AUDSRV.IRX
-          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbd/irx/usbd.irx -o iso_root/USBD.IRX
-          curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/usbkbd/irx/usbkbd.irx -o iso_root/USBKBD.IRX
           
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          cp roms/*.zip iso_root/ROMS/ || true
           
-          # Generate SYSTEM.CNF for boot
+          # Build SYSTEM.CNF
           printf "BOOT2 = cdrom0:\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
           
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
 
-      - name: Upload ISO
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CPS2-Emulator-PS2
+          name: CPS2-Emulator-ISO
           path: bin/cps2emu.iso
