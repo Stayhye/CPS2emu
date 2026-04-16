@@ -8,49 +8,43 @@
 #include <kernel.h>
 #include <sifrpc.h>
 #include <loadfile.h>
+#include <unistd.h>      // Required for chdir
 #include "cps2.h"
 
-// External variables used by the engine for pathing
+// External declarations to match the rest of the engine
 extern char launchDir[MAX_PATH];
+extern char game_dir[MAX_PATH];
 extern char cache_dir[MAX_PATH];
 
 void cps2_main(void)
 {
-    // --- 1. IOP & RPC RESET ---
-    SifInitRpc(0);
-    
-    // Load fundamental sound library from PS2 ROM
-    SifLoadModule("rom0:LIBSD", 0, NULL);
+    // --- 1. FORCE PATHS IMMEDIATELY ---
+    // This overrides any 'host:/' detection from the loader
+    strcpy(launchDir, "cdrom0:\\");
+    strcpy(game_dir, "cdrom0:\\ROMS");
+    strcpy(cache_dir, "mc1:");
+    chdir("cdrom0:\\"); 
 
-    // --- NEW: LOAD MEMORY CARD DRIVERS FOR MC1: CACHE ---
-    SifLoadModule("rom0:MCMAN", 0, NULL);
-    SifLoadModule("rom0:MCSERV", 0, NULL);
+    // --- 2. IOP & RPC RESET ---
+    SifInitRpc(0);
+    SifLoadModule("rom0:LIBSD", 0, NULL);
+    SifLoadModule("rom0:MCMAN", 0, NULL);   // Required for mc1:
+    SifLoadModule("rom0:MCSERV", 0, NULL);  // Required for mc1:
     
-    // --- 2. MODULE LOADING ---
-    // audsrv MUST be loaded before sound_init() or SifBindRpc will fail
+    // --- 3. MODULE LOADING ---
     int aud_ret = SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
     int usbd_ret = SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     int kbd_ret = SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    // Logging to PCSX2 console for debugging
-    printf("[PS2] AUDSRV Load: %d, USBD: %d, KBD: %d\n", aud_ret, usbd_ret, kbd_ret);
+    printf("[PS2] Launch: %s | Game: %s | Cache: %s\n", launchDir, game_dir, cache_dir);
 
-    // Give the IOP time to settle and register the RPC services
-    int i;
-    for(i = 0; i < 6000000; i++) { __asm__("nop"); }
-
-    // --- NEW: FORCE HARDWARE PATHS ---
-    // This stops the "host:/" hang and moves cache to Memory Card Slot 2
-    strcpy(launchDir, "cdrom0:\\");
-    strcpy(cache_dir, "mc1:");
-    printf("[PS2] Launch Dir forced to: %s\n", launchDir);
-    printf("[PS2] Cache Dir forced to: %s\n", cache_dir);
+    // Give the IOP time to settle
+    for(int i = 0; i < 6000000; i++) { __asm__("nop"); }
 
     strcpy(game_name, "AVSPU");
 
-    // --- 3. THREAD MANAGEMENT ---
-    int main_id = GetThreadId();
-    ChangeThreadPriority(main_id, 72);
+    // --- 4. THREAD MANAGEMENT ---
+    ChangeThreadPriority(GetThreadId(), 72);
 
     Loop = LOOP_RESET;
     while (Loop >= LOOP_RESTART)
@@ -61,12 +55,11 @@ void cps2_main(void)
 
         if (memory_init())
         {
-            // This should now succeed as AUDSRV.IRX is live on the IOP
             if (sound_init())
             {
                 input_init();
-
-                if (cps2_init())
+                // cps2_init is likely where rominfo.cps2 is opened
+                if (cps2_init()) 
                 {
                     cps2_run();
                 }
