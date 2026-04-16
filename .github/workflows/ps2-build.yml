@@ -50,23 +50,6 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-      - name: Hex Patch USBKBD Hang
-        run: |
-          # Patching address 0x001465F8 with NOP (00 00 00 00)
-          # Assuming file offset is 0x465F8 based on standard ELF header
-          python3 -c "
-          import os
-          file_path = 'bin/cps2emu.elf'
-          if os.path.exists(file_path):
-              with open(file_path, 'r+b') as f:
-                  f.seek(0x465F8)
-                  f.write(b'\x00\x00\x00\x00')
-              print('Successfully patched USBKBD hang at offset 0x465F8')
-          else:
-              print('ELF not found, skipping patch')
-              exit(1)
-          "
-
       - name: Package ISO with IRX Bundle
         run: |
           mkdir -p iso_root
