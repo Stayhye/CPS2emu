@@ -16,21 +16,24 @@ jobs:
 
       - name: Patch and Flatten Source
         run: |
-          # 1. Inject tamtypes.h to fix u32/u8 errors
+          # 1. Inject tamtypes.h (using standard sed)
           sed -i '1i #include <tamtypes.h>' src/emumain.h
           sed -i '1i #include <tamtypes.h>' src/emudraw.h
           
-          # 2. Remove DS3/DS4 references as requested
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds3/Id' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds4/Id' {} +
+          # 2. Remove DS3/DS4 references (using grep to find files, then sed to delete)
+          # We use a standard delete command without the 'I' flag
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds3/d' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS3/d' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds4/d' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS4/d' {} +
 
-          # 3. Move files from romconv to src root to fix pathing
-          mv src/romconv/zfile.h src/ 2>/dev/null || true
-          mv src/romconv/zfile.c src/ 2>/dev/null || true
-          mv src/romconv/unzip.h src/ 2>/dev/null || true
-          mv src/romconv/unzip.c src/ 2>/dev/null || true
+          # 3. Move files from romconv to src root
+          # Checking existence first to prevent errors
+          [ -d src/romconv ] && mv src/romconv/zfile.* src/ 2>/dev/null || true
+          [ -d src/romconv ] && mv src/romconv/unzip.* src/ 2>/dev/null || true
           
-          # 4. Clean up include statements in all files
+          # 4. Clean up include statements
+          # Replacing both "zip/..." and "romconv/..." paths
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/||g' {} +
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|romconv/||g' {} +
 
@@ -39,7 +42,6 @@ jobs:
           cat << 'EOF' > Makefile
           EE_BIN = bin/cps2emu.elf
           
-          # Object list reflecting flattened structure
           EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
                     src/unzip.o src/zfile.o src/qsound.o src/sndintrf.o \
                     src/cps2/state.o src/cps2/cache.o src/cps2/cps2.o src/cps2/cps2crpt.o \
