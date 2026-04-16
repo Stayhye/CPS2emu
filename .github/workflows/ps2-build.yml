@@ -8,22 +8,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Install Build Tools
+        run: |
+          apk update
+          apk add --no-cache build-base git curl cdrkit
+
       - name: Build
         run: |
           export PS2DEV=/usr/local/ps2dev
           export PS2SDK=$PS2DEV/ps2sdk
+          # Ensure both the toolchain and system bins are in PATH
           export PATH=$PS2DEV/bin:$PS2DEV/ee/bin:$PS2DEV/iop/bin:$PATH
+          
           mkdir -p bin
-          make clean && make
+          make clean
+          make
+
       - name: Package ISO
         run: |
-          apk add --no-cache curl cdrkit
           mkdir -p iso_root/ROMS
           curl -L https://github.com/ps2dev/ps2sdk-ports/raw/master/audsrv/irx/audsrv.irx -o iso_root/AUDSRV.IRX
           cp bin/cps2emu.elf iso_root/CPS2EMU.ELF
-          echo "BOOT2 = cdrom0:\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC" > iso_root/SYSTEM.CNF
+          
+          # Properly formatted SYSTEM.CNF
+          printf "BOOT2 = cdrom0:\\CPS2EMU.ELF;1\nVER = 1.00\nVMODE = NTSC\n" > iso_root/SYSTEM.CNF
+          
           mkisofs -o bin/cps2emu.iso -R -J -input-charset utf8 iso_root/
-      - name: Upload
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CPS2-PS2-ISO
