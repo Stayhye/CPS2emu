@@ -37,6 +37,14 @@ jobs:
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"zipname.cps2"/"ZIPNAME.CPS2"/g' {} +
           # ------------------------------------------------
 
+          # Force all path strings to point to the correct PS2 hardware locations
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/roms"/"cdrom0:\\\\ROMS"/g' {} +
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/cache"/"mc1:"/g' {} +
+          find src -type f -name "*.c" -exec sed -i 's/"\.\/config"/"cdrom0:"/g' {} +
+          
+          # Specifically force the rominfo location if it's nested in a config path
+          find src -type f -name "*.c" -exec sed -i 's/config\/rominfo.cps2/ROMINFO.CPS2/g' {} +
+
           # 3. Locate the toolchain dynamically
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
