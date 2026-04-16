@@ -64,6 +64,12 @@ jobs:
           # 4. Fix the specific rominfo.cps2 path seen in your logs
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/config\/rominfo.cps2/ROMINFO.CPS2/g' {} +
 
+      - name: Brute Force Path Strings
+        run: |
+          sed -i 's/"\.\/cache"/"mc1:"/g' src/cps2/cache.c || true
+          sed -i 's/"\.\/roms"/"cdrom0:\\\\ROMS"/g' src/cps2/loadrom.c || true
+          sed -i 's/"\.\/config"/"cdrom0:\\\\CONFIG"/g' src/cps2/cps2.c || true
+
           # 4. Run make
           make \
             CC="$EE_GCC_PATH" \
