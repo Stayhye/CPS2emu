@@ -14,17 +14,25 @@
 #include "inptport.h"
 #include "getopt.h"
 
-// At the very start of main()
-*(volatile uint32_t*)(0x001465F8) = 0x00000000;
-// Make sure to sync instruction cache if needed
-SyncDCache((void*)0x001465F8, (void*)0x001465FC);
-
+// Set global directories
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
+char cache_dir[MAX_PATH] = "mc1:"; // Forces cache logic to check Memory Card Slot 2
 
 void ps2_init_modules() {
     SifInitRpc(0);
+    
+    // Core ROM Modules
     SifLoadModule("rom0:LIBSD", 0, NULL);
+    
+    // Load Memory Card Drivers (Required for mc1: access)
+    SifLoadModule("rom0:MCMAN", 0, NULL);
+    SifLoadModule("rom0:MCSERV", 0, NULL);
+    
+    // Load Audio Driver from ISO
     SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
+    
+    // Note: USBD and USBKBD are loaded here, 
+    // but the GitHub Action will now automatically NOP the hang in the ELF.
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
     
@@ -33,6 +41,9 @@ void ps2_init_modules() {
 }
 
 int main(int argc, char *argv[]) {
+    // The manual memory patch at 0x001465F8 has been removed.
+    // The workflow now applies this patch to the binary automatically using the opcode pattern.
+
     ChangeThreadPriority(GetThreadId(), 72);
     ps2_init_modules();
 
