@@ -33,17 +33,20 @@ jobs:
           curl -L https://raw.githubusercontent.com/gameblabla/cps2emu/master/src/sound/sndintrf.h -o src/sound/sndintrf.h
 
           # --- CASE SENSITIVITY PATCH ---
-          # This replaces lowercase filenames in the code with uppercase for CD-ROM compatibility
-          sed -i 's/"rominfo.cps2"/"ROMINFO.CPS2"/g' src/*.c src/*.h 2>/dev/null || true
-          sed -i 's/"zipname.cps2"/"ZIPNAME.CPS2"/g' src/*.c src/*.h 2>/dev/null || true
+          # Patching code to look for uppercase filenames for CD-ROM
+          # Using find to ensure we hit all directories (src/ps2, src/cps2, etc)
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"rominfo.cps2"/"ROMINFO.CPS2"/g' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/"zipname.cps2"/"ZIPNAME.CPS2"/g' {} +
           # ------------------------------
 
-          # 3. Locate the toolchain dynamically
+          # 3. Locate the toolchain
           EE_GCC_PATH=$(find /usr/local/ps2dev -name "ee-gcc" | head -n 1)
           BIN_DIR=$(dirname "$EE_GCC_PATH")
+          # Export to path for the sub-processes
           export PATH="$BIN_DIR:$PATH"
           
           # 4. Run make
+          # Removed the ./ from ee-strip and used the variable to ensure it is found
           make \
             CC="$EE_GCC_PATH" \
             EE_CC="$EE_GCC_PATH" \
@@ -51,8 +54,13 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-          # 5. Strip the ELF to save RAM (Critical for big ROMs like AVP)
-          ${BIN_DIR}/ee-strip bin/cps2emu.elf
+          # 5. Strip the ELF (using the full path to the binary)
+          if [ -f bin/cps2emu.elf ]; then
+            ${BIN_DIR}/ee-strip bin/cps2emu.elf
+          else
+            echo "Error: bin/cps2emu.elf not found, make might have failed."
+            exit 1
+          fi
 
       - name: Package ISO with IRX Bundle
         run: |
