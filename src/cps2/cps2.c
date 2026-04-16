@@ -103,17 +103,25 @@ static void cps2_run(void)
 --------------------------------------------------------*/
 void cps2_main(void)
 {
+    // --- 1. IOP RESET & RPC INIT ---
     SifInitRpc(0);
     
+    // Load fundamental sound library from PS2 ROM
+    SifLoadModule("rom0:LIBSD", 0, NULL);
+    
+    // --- 2. MODULE LOADING ---
+    // Load AUDSRV first so sound_init() can bind to it
+    int aud_ret = SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
     int usbd_ret = SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     int kbd_ret = SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
+    printf("[PS2] AUDSRV Load Return: %d\n", aud_ret);
     printf("[PS2] USBD Load Return: %d\n", usbd_ret);
     printf("[PS2] USBKBD Load Return: %d\n", kbd_ret);
 
-    // Harder delay
+    // Harder delay: IOP needs time to register RPC services
     int i;
-    for(i = 0; i < 5000000; i++) { __asm__("nop"); }
+    for(i = 0; i < 6000000; i++) { __asm__("nop"); }
 
     strcpy(game_name, "AVSPU");
 
@@ -125,13 +133,12 @@ void cps2_main(void)
     while (Loop >= LOOP_RESTART)
     {
         Loop = LOOP_EXEC;
-
         fatal_error = 0;
-
         video_clear_screen();
 
         if (memory_init())
         {
+            // Now that AUDSRV is loaded, sound_init should successfully SifBindRpc
             if (sound_init())
             {
                 input_init();
@@ -140,8 +147,8 @@ void cps2_main(void)
                 {
                     cps2_run();
                 }
+                cps2_init_fail:
                 cps2_exit();
-
                 input_shutdown();
             }
             sound_exit();
