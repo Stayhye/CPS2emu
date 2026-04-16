@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
+#include <unistd.h>
 
 #include <SDL/SDL.h>
 #include <kernel.h>
@@ -15,8 +16,9 @@
 #include "getopt.h"
 
 // Set global directories
+char launchDir[MAX_PATH];
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
-char cache_dir[MAX_PATH] = "mc1:"; // Forces cache logic to check Memory Card Slot 2
+char cache_dir[MAX_PATH] = "mc1:"; 
 
 void ps2_init_modules() {
     SifInitRpc(0);
@@ -31,8 +33,8 @@ void ps2_init_modules() {
     // Load Audio Driver from ISO
     SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
     
-    // Note: USBD and USBKBD are loaded here, 
-    // but the GitHub Action will now automatically NOP the hang in the ELF.
+    // Note: USBD and USBKBD are loaded here. 
+    // The GitHub Action applies the Opcode NOP patch to prevent the hang.
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
     
@@ -41,18 +43,30 @@ void ps2_init_modules() {
 }
 
 int main(int argc, char *argv[]) {
-    // The manual memory patch at 0x001465F8 has been removed.
-    // The workflow now applies this patch to the binary automatically using the opcode pattern.
+    // Force Launch Directory to CD-ROM to fix "host:/" errors
+    strcpy(launchDir, "cdrom0:\\");
+    chdir("cdrom0:\\");
 
-    ChangeThreadPriority(GetThreadId(), 72);
     ps2_init_modules();
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) return -1;
+    // High priority for the emulator thread
+    ChangeThreadPriority(GetThreadId(), 72);
+
+    // Initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+        printf("SDL Init Failed: %s\n", SDL_GetError());
+        return -1;
+    }
 
     SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
     SDL_ShowCursor(SDL_DISABLE);
     SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
 
+    // Print status to PCSX2 Console
+    printf("[PS2] LaunchDir: %s\n", launchDir);
+    printf("[PS2] GameDir: %s\n", game_dir);
+
     cps2_main();
+    
     return 0;
 }
