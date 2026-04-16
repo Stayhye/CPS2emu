@@ -78,23 +78,6 @@ jobs:
             EE_AR="${BIN_DIR}/ee-ar" \
             EE_LD="$EE_GCC_PATH"
 
-      - name: Binary Hex Patch
-        run: |
-          # 1. Patch the hardcoded path to ROMINFO
-          # Original: host:/config/rominfo.cps2 (23 chars)
-          # New:      cdrom0:ROMINFO.CPS2 (19 chars + 4 nulls)
-          sed -i 's|host:/config/rominfo\.cps2|cdrom0:ROMINFO.CPS2\x00\x00\x00\x00|g' bin/cps2emu.elf
-
-          # 2. Patch the Cache Directory
-          # Original: ./cache (7 chars)
-          # New:      mc1: (4 chars + 3 nulls)
-          sed -i 's|\./cache|mc1:\x00\x00\x00|g' bin/cps2emu.elf
-
-          # 3. Patch the ROMs Directory
-          # Original: ./roms (6 chars)
-          # New:      cdrom0: (7 chars - Note: ensure target fits or adjust)
-          sed -i 's|\./roms|cdrom0:|g' bin/cps2emu.elf
-
       - name: Pattern Patch USBKBD Hang
         run: |
           python3 -c "
