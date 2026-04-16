@@ -5,9 +5,9 @@
 #include "emumain.h"
 #include <unistd.h>
 #include <stddef.h>
-#include <ctype.h> // Added for toupper
+#include <ctype.h> 
 
-// Helper function to force uppercase for PS2 CD-ROM compatibility
+// Helper function to force uppercase for PS2 hardware compatibility
 static void force_upper(char *s) {
     if (!s) return;
     while (*s) {
@@ -38,8 +38,8 @@ int file_open(const char *fname1, const char *fname2, const u32 crc, char *fname
     struct zip_find_t file;
     char path[MAX_PATH];
 
-    // Construct path 1 and force to uppercase
-    sprintf(path, "%s/%s.ZIP", game_dir, fname1);
+    // Force check in cdrom0:\ROMS/
+    sprintf(path, "cdrom0:\\ROMS\\%s.ZIP", fname1);
     force_upper(path); 
 
     if (zip_open(path) != -1)
@@ -58,8 +58,7 @@ int file_open(const char *fname1, const char *fname2, const u32 crc, char *fname
 
     if (!found && fname2 != NULL)
     {
-        // Construct path 2 and force to uppercase
-        sprintf(path, "%s/%s.ZIP", game_dir, fname2);
+        sprintf(path, "cdrom0:\\ROMS\\%s.ZIP", fname2);
         force_upper(path);
 
         if (zip_open(path) != -1)
@@ -112,7 +111,7 @@ int file_getc(void)
 }
 
 /*--------------------------------------------------------
-    Cache file opening logic
+    Cache file opening logic - FORCED TO MC1
 --------------------------------------------------------*/
 
 #if USE_CACHE
@@ -121,31 +120,23 @@ FILE* cachefile_open(void)
     char path[MAX_PATH];
     FILE* cache_fd;
 
-    // Check cache_dir and force uppercase
-    sprintf(path, "%s/%s.CACHE", cache_dir, game_name);
+    // We ignore the global cache_dir and force mc1:
+    sprintf(path, "mc1:/%s.CACHE", game_name);
     force_upper(path);
-    if ((cache_fd = fopen(path, "rb")) != NULL) // Fixed >= 0 check for FILE*
-        return cache_fd;
+    
+    // Debug print for PCSX2 log
+    printf("CPS2EMU: Attempting cache load from %s\n", path);
 
-    // Check game_dir and force uppercase
-    sprintf(path, "%s/%s.CACHE", game_dir, game_name);
-    force_upper(path);
     if ((cache_fd = fopen(path, "rb")) != NULL)
         return cache_fd;
 
-    if (!cache_parent_name[0])
-        return NULL;
-
-    // Check parent cache and force uppercase
-    sprintf(path, "%s/%s.CACHE", cache_dir, cache_parent_name);
-    force_upper(path);
-    if ((cache_fd = fopen(path, "rb")) != NULL)
-        return cache_fd;
-
-    sprintf(path, "%s/%s.CACHE", game_dir, cache_parent_name);
-    force_upper(path);
-    if ((cache_fd = fopen(path, "rb")) != NULL)
-        return cache_fd;
+    if (cache_parent_name[0])
+    {
+        sprintf(path, "mc1:/%s.CACHE", cache_parent_name);
+        force_upper(path);
+        if ((cache_fd = fopen(path, "rb")) != NULL)
+            return cache_fd;
+    }
 
     return NULL;
 }
