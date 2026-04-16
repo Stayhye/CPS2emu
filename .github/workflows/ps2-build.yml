@@ -17,38 +17,36 @@ jobs:
       - name: Patch and Flatten Source
         run: |
           # 1. Inject tamtypes.h to fix u32/u8 errors
-          sed -i '1i #include <tamtypes.h>' src/emumain.h
-          sed -i '1i #include <tamtypes.h>' src/emudraw.h
+          # BusyBox sed requires a slightly different syntax for insertion
+          find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>' {} +
+          find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
           
-          # 2. Remove DS3/DS4 references (case-sensitive variants for BusyBox sed)
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds3/d' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS3/d' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds4/d' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS4/d' {} +
+          # 2. Remove DS3/DS4 references
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds3/d' {} +
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS3/d' {} +
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds4/d' {} +
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/DS4/d' {} +
 
-          # 3. Physically move files from romconv to src
-          # Using explicit filenames to ensure BusyBox handles it
-          if [ -d "src/romconv" ]; then
-            cp src/romconv/zfile.h src/zfile.h
-            cp src/romconv/zfile.c src/zfile.c
-            cp src/romconv/unzip.h src/unzip.h
-            cp src/romconv/unzip.c src/unzip.c
-            echo "Files moved from src/romconv to src/"
-          fi
+          # 3. Use find to LOCATE and MOVE zfile/unzip to src/
+          # This handles if the folder is src/romconv or just romconv/
+          find . -name "zfile.h" -exec cp {} src/ \;
+          find . -name "zfile.c" -exec cp {} src/ \;
+          find . -name "unzip.h" -exec cp {} src/ \;
+          find . -name "unzip.c" -exec cp {} src/ \;
           
-          # 4. Clean up all include paths project-wide
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|romconv/||g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/||g' {} +
+          # 4. Global Path Cleanup
+          # Remove "romconv/" or "zip/" prefixes from all include lines
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|romconv/||g' {} +
+          find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/||g' {} +
 
-          # 5. Debug: List files to verify existence
-          ls -l src/zfile.h src/unzip.h
+          # 5. Final Verification
+          echo "Verifying file locations:"
+          ls -l src/zfile.h src/unzip.h || echo "STILL MISSING"
 
       - name: Create Makefile
         run: |
           cat << 'EOF' > Makefile
           EE_BIN = bin/cps2emu.elf
-          
-          # Object list now assumes flattened src/ directory
           EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
                     src/unzip.o src/zfile.o src/qsound.o src/sndintrf.o \
                     src/cps2/state.o src/cps2/cache.o src/cps2/cps2.o src/cps2/cps2crpt.o \
@@ -57,7 +55,6 @@ jobs:
                     src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
                     src/cpu/z80/cz80.o src/cpu/z80/z80.o
 
-          # Include src first so "zfile.h" is found immediately
           EE_INCS = -Isrc -Isrc/cps2 -Isrc/sound -I$(PS2SDK)/ports/include
           EE_LDFLAGS = -L$(PS2SDK)/ports/lib
           EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
