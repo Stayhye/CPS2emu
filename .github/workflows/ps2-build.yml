@@ -16,27 +16,29 @@ jobs:
 
       - name: Patch Source Code
         run: |
-          # 1. Inject tamtypes.h and MAX_PATH to fix u32 and undeclared errors
-          find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#define MAX_PATH 260' {} +
+          # 1. Inject tamtypes.h and MAX_PATH
+          # We use a more robust way to ensure they are at the top
+          find src -name "emumain.h" -exec sed -i '1i #include <tamtypes.h>\n#ifndef MAX_PATH\n#define MAX_PATH 260\n#endif' {} +
           find src -name "emudraw.h" -exec sed -i '1i #include <tamtypes.h>' {} +
           
-          # 2. Fix Includes Project-Wide
-          # This ensures that even if files are in romconv/ or sound/, they can find each other
+          # 2. Redirect "zip/" includes to "romconv/"
+          # This fixes the specific error: src/emumain.h:54:10: fatal error: zip/zfile.h
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/zfile.h|romconv/zfile.h|g' {} +
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|zip/unzip.h|romconv/unzip.h|g' {} +
+          
+          # 3. Fix other potential path mismatches
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"zfile.h"|"romconv/zfile.h"|g' {} +
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"unzip.h"|"romconv/unzip.h"|g' {} +
           find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"sndintrf.h"|"sound/sndintrf.h"|g' {} +
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's|"qsound.h"|"sound/qsound.h"|g' {} +
 
-          # 3. Cleanup DualShock references (DS3/DS4) as requested
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds3/Id' {} + 2>/dev/null || true
-          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/ds4/Id' {} + 2>/dev/null || true
+          # 4. Remove DS3/DS4 references
+          find src -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i '/[Dd][Ss][34]/d' {} +
 
       - name: Create Makefile
         run: |
           cat << 'EOF' > Makefile
           EE_BIN = bin/cps2emu.elf
           
-          # Explicit paths to all objects
           EE_OBJS = src/getopt.o src/emumain.o src/emudraw.o src/font.o \
                     src/romconv/unzip.o src/romconv/zfile.o \
                     src/sound/qsound.o src/sound/sndintrf.o \
@@ -46,7 +48,6 @@ jobs:
                     src/cps2/coin.o src/cps2/hiscore.o src/cpu/m68000/c68k.o src/cpu/m68000/m68000.o \
                     src/cpu/z80/cz80.o src/cpu/z80/z80.o
 
-          # Include all subdirectories so the compiler can resolve nested headers
           EE_INCS = -Isrc -Isrc/cps2 -Isrc/romconv -Isrc/sound -Isrc/cpu/m68000 -Isrc/cpu/z80 -I$(PS2SDK)/ports/include
           EE_LDFLAGS = -L$(PS2SDK)/ports/lib
           EE_LIBS = -lSDL -lz -lpatches -laudsrv -lm
