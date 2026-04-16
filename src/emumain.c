@@ -14,6 +14,11 @@
 #include "inptport.h"
 #include "getopt.h"
 
+// At the very start of main()
+*(volatile uint32_t*)(0x001465F8) = 0x00000000;
+// Make sure to sync instruction cache if needed
+SyncDCache((void*)0x001465F8, (void*)0x001465FC);
+
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
 
 void ps2_init_modules() {
