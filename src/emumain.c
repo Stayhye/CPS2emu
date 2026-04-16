@@ -32,7 +32,7 @@ char game_name[16];
 char parent_name[16];
 char cache_parent_name[16];
 
-// Updated for CD-ROM usage
+// ROMs and cache targeted for the PS2 CD-ROM and memory card/mass
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
 char cache_dir[MAX_PATH] = "./cache";
 
@@ -79,7 +79,7 @@ static SDL_Surface *screen_surface = NULL;
 static u16 *screen = NULL;
 
 /******************************************************************************
-    PS2 Module Initialization (Fixes SifBindRpc/Sound)
+    PS2 Module Initialization
 ******************************************************************************/
 void ps2_init_modules() {
     SifInitRpc(0);
@@ -87,14 +87,13 @@ void ps2_init_modules() {
     // Initialize the IOP and load core sound/USB modules
     SifLoadModule("rom0:LIBSD", 0, NULL);
     
-    // Load external drivers from the Disc - Must be UPPERCASE on ISO
+    // External IRX drivers loaded from the disc
     if (SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL) < 0) {
         printf("Failed to load AUDSRV.IRX\n");
     }
     SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    // Small delay to let IOP services settle
     nopdelay();
 }
 
@@ -102,40 +101,32 @@ void ps2_init_modules() {
     Main Entry Point
 ******************************************************************************/
 int main(int argc, char *argv[]) {
-    // 1. Thread Setup
     int main_id = GetThreadId();
     ChangeThreadPriority(main_id, 72);
 
-    // 2. IOP Setup (Crucial for SifBindRpc)
     ps2_init_modules();
 
-    // 3. SDL Initialization
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
         printf("SDL_Init Failed: %s\n", SDL_GetError());
         return -1;
     }
 
-    // Ignore keyboard to prevent polling crashes
     SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
     SDL_EventState(SDL_KEYUP, SDL_IGNORE);
 
-    // 4. Video Mode Setup
     screen_surface = SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
     if (screen_surface == NULL) {
         return -1;
     }
     SDL_ShowCursor(SDL_DISABLE);
 
-    // 5. Joystick Setup
     if (SDL_NumJoysticks() > 0) {
         SDL_JoystickOpen(0);
     }
 
-    // 6. Memory Allocation
     upper_memory = (u8 *)malloc(CACHE_SIZE);
     work_frame = (u16 *)memalign(64, BUF_WIDTH * BUF_HEIGHT * 2);
 
-    // 7. Core Execution
     cps2_main();
 
     return 0;
