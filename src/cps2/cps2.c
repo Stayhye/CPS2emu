@@ -1,7 +1,6 @@
 /******************************************************************************
     cps2.c
-    CPS2 emulation core
-    Hardcoded for Alien vs. Predator (AVSPU) on PlayStation 2
+    CPS2 emulation core - Hardcoded for AVSPU
 ******************************************************************************/
 
 #include <string.h>
@@ -11,115 +10,24 @@
 #include <loadfile.h>
 #include "cps2.h"
 
-/******************************************************************************
-    Local function
-******************************************************************************/
-
-/*--------------------------------------------------------
-    CPS2 emulation initialize
---------------------------------------------------------*/
-static int cps2_init(void)
-{
-#ifdef HISCORE
-    hs_clear();
-    if (option_hiscore) hs_open();
-#endif
-    
-    // This will look for the driver matching game_name (AVSPU)
-    cps2_driver_init();
-
-    return cps2_video_init();
-}
-
-/*--------------------------------------------------------
-    CPS2 emulation reset
---------------------------------------------------------*/
-static void cps2_reset(void)
-{
-    cps2_driver_reset();
-    cps2_video_reset();
-
-    timer_reset();
-    input_reset();
-    sound_reset();
-    sound_volume(option_sound_volume);
-    
-    msg_screen_clear();
-    autoframeskip_reset();
-
-    Loop = LOOP_EXEC;
-}
-
-/*--------------------------------------------------------
-    CPS2 emulation shutdown and exit
---------------------------------------------------------*/
-static void cps2_exit(void)
-{
-    video_clear_screen();
-    msg_screen_init();
-
-    msg_printf("System shutdown.\n");
-
-#ifdef HISCORE
-    hs_close();
-#endif
-    cps2_video_exit();
-    cps2_driver_exit();
-    save_gamecfg(game_name);
-
-    msg_printf("Done.\n");
-}
-
-/*--------------------------------------------------------
-    CPS2 emulation start
---------------------------------------------------------*/
-static void cps2_run(void)
-{
-    while (Loop >= LOOP_RESET)
-    {
-        cps2_reset();
-
-        while (Loop == LOOP_EXEC)
-        {
-            timer_update_cpu();
-#ifdef HISCORE
-            if (option_hiscore) hs_update();
-#endif
-            update_inputport();
-            update_screen();
-        }
-
-        video_clear_screen();
-        sound_mute(1);
-    }
-}
-
-/******************************************************************************
-    Global function
-******************************************************************************/
-
-/*--------------------------------------------------------
-    CPS2 emulation main
---------------------------------------------------------*/
 void cps2_main(void)
 {
-    // --- 1. IOP RESET & RPC INIT ---
+    // --- 1. IOP & RPC RESET ---
     SifInitRpc(0);
     
     // Load fundamental sound library from PS2 ROM
     SifLoadModule("rom0:LIBSD", 0, NULL);
     
     // --- 2. MODULE LOADING ---
-    // Load AUDSRV first so sound_init() can bind to it
+    // audsrv MUST be loaded before sound_init() or SifBindRpc will fail
     int aud_ret = SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
     int usbd_ret = SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
     int kbd_ret = SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
 
-    printf("[PS2] AUDSRV Load Return: %d\n", aud_ret);
-    printf("[PS2] USBD Load Return: %d\n", usbd_ret);
-    printf("[PS2] USBKBD Load Return: %d\n", kbd_ret);
+    // Logging to PCSX2 console for debugging
+    printf("[PS2] AUDSRV Load: %d, USBD: %d, KBD: %d\n", aud_ret, usbd_ret, kbd_ret);
 
-    // Harder delay: IOP needs time to register RPC services
+    // Give the IOP time to settle and register the RPC services
     int i;
     for(i = 0; i < 6000000; i++) { __asm__("nop"); }
 
@@ -138,7 +46,7 @@ void cps2_main(void)
 
         if (memory_init())
         {
-            // Now that AUDSRV is loaded, sound_init should successfully SifBindRpc
+            // This should now succeed as AUDSRV.IRX is live on the IOP
             if (sound_init())
             {
                 input_init();
@@ -147,7 +55,6 @@ void cps2_main(void)
                 {
                     cps2_run();
                 }
-                cps2_init_fail:
                 cps2_exit();
                 input_shutdown();
             }
