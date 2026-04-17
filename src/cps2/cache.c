@@ -208,32 +208,22 @@ void cache_init(void)
 int cache_start(void)
 {
     int i;
-    u32 size = 0;
 
-    // --- FIX: Explicit Hardware Paths for PCSX2/PS2 ---
+    // --- FIX: Force Hardware Paths & Prevent Host Mount Errors ---
     extern char game_dir[];
     extern char cache_dir[];
     strcpy(game_dir, "cdrom0:\\ROMS");
     strcpy(cache_dir, "mc1:");
 
-    // Attempt 1: Direct open from root (standard lowercase)
+    // --- FIX: Explicit File Search for ISO9660 Compatibility ---
+    // Bypass cachefile_open() to ensure we hit the cdrom0: device correctly
     cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
+    if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
+    if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
 
-    // Attempt 2: ISO9660 Uppercase (common on Mastered Discs)
-    if (cache_fd == NULL) {
-        cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
-    }
-
-    // Attempt 3: ISO9660 Version String (strict hardware compatibility)
-    if (cache_fd == NULL) {
-        cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
-    }
-
-    // --- FIX: Prevent TLB Miss on Load Failure ---
     if (cache_fd == NULL) 
     {
-        msg_printf("ERROR: rominfo.cps2 not found on cdrom0:\n");
-        msg_printf("Verify file is in the ISO root directory.\n");
+        msg_printf("ERROR: rominfo.cps2 not found on cdrom0.\n");
         return 0; 
     }
 
@@ -245,22 +235,20 @@ int cache_start(void)
         return 0;
     }
 
-    if(block_capacity <= CACHE_SIZE) {
-        read_cache = read_cache_static;
-        num_cache = block_capacity >> BLOCK_SHIFT;
-        block_data = NULL;
+    // --- FIX: Force Cache Priority (Ignore block_capacity check) ---
+    // By forcing read_cache_compress, we stream the 23MB ROM in chunks
+    read_cache = read_cache_compress;
+    
+    if(option_fullcache) {
+        num_cache = CACHE_SIZE >> BLOCK_SHIFT;
+        block_data = malloc(block_size);
     } else {
-        read_cache = read_cache_compress;
-        if(option_fullcache) {
-            num_cache = CACHE_SIZE >> BLOCK_SHIFT;
-            block_data = malloc(block_size);
-        } else {
-            num_cache = ((CACHE_SIZE - block_size) & ~0xffff) >> BLOCK_SHIFT;
-            block_data = &GFX_MEMORY[num_cache << BLOCK_SHIFT];
-        }
+        // Use the end of GFX_MEMORY for the decompression buffer
+        num_cache = ((CACHE_SIZE - block_size) & ~0xffff) >> BLOCK_SHIFT;
+        block_data = &GFX_MEMORY[num_cache << BLOCK_SHIFT];
     }
 
-    msg_printf("%dKB cache allocated.\n", (num_cache << BLOCK_SHIFT) / 1024);
+    msg_printf("Streaming Mode: %dKB window allocated.\n", (num_cache << BLOCK_SHIFT) / 1024);
 
     for (i = 0; i < num_cache; i++)
         cache_data[i].idx = i;
@@ -277,18 +265,14 @@ int cache_start(void)
 
     if (!fill_cache())
     {
-        msg_printf("Cache load error!!!\n");
-        pad_wait_press(PAD_WAIT_INFINITY);
-        Loop = LOOP_EXIT;
+        msg_printf("Initial cache fill failed!\n");
         if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
-    if (cache_fd != NULL)
-    {
-        fclose(cache_fd);
-        cache_fd = NULL;
-    }
+    /* Note: We do not fclose(cache_fd) here. 
+       read_cache_compress requires an open handle to swap blocks from the disc.
+    */
 
     msg_printf("Cache setup complete.\n");
     return 1;
@@ -299,11 +283,16 @@ void cache_shutdown(void)
     num_cache = 0;
     if(block_data != NULL) free(block_data);
     block_data = NULL;
+    
+    if (cache_fd != NULL) {
+        fclose(cache_fd);
+        cache_fd = NULL;
+    }
 }
 
 void cache_sleep(int flag)
 {
-    // No-op for standard PS2 implementation
+    // No-op
 }
 
 #endif /* USE_CACHE */
