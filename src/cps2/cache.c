@@ -92,7 +92,6 @@ static int fill_cache(void)
     i = 0;
     block = 0;
     
-    // SAFETY: If cache_fd is invalid, abort immediately to prevent TLB Miss
     if (cache_fd == NULL) return 0;
 
     if(block_data == NULL) {
@@ -115,7 +114,7 @@ static int fill_cache(void)
             p->block = block;
             blocks[block] = p->idx;
             
-            load_block(p->idx, block_offset[block]);
+            load_block(p->idx, block_offset[new_block]); // Use current block loop index
 
             head = p->next;
             head->prev = NULL;
@@ -209,46 +208,44 @@ int cache_start(void)
 {
     int i;
 
-    // --- FIX: Force Hardware Paths & Prevent Host Mount Errors ---
+    // --- 1. FORCE STREAMING MODE IMMEDIATELY ---
+    // This stops the emulator from even trying to fit the 23MB ROM in RAM
+    read_cache = read_cache_compress;
+
+    // --- 2. SET HARDWARE PATHS ---
     extern char game_dir[];
     extern char cache_dir[];
     strcpy(game_dir, "cdrom0:\\ROMS");
     strcpy(cache_dir, "mc1:");
 
-    // --- FIX: Explicit File Search for ISO9660 Compatibility ---
-    // Bypass cachefile_open() to ensure we hit the cdrom0: device correctly
+    // --- 3. EXPLICIT ISO9660 OPEN ---
     cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
     if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
     if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
 
     if (cache_fd == NULL) 
     {
-        msg_printf("ERROR: rominfo.cps2 not found on cdrom0.\n");
+        msg_printf("ERROR: rominfo.cps2 not found.\n");
         return 0; 
     }
 
     GFX_MEMORY = upper_memory;
-
     if(!GFX_MEMORY) {
-        msg_printf("ERROR: Could not allocate cache memory.\n");
+        msg_printf("ERROR: Memory pointer GFX_MEMORY is NULL.\n");
         if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
-    // --- FIX: Force Cache Priority (Ignore block_capacity check) ---
-    // By forcing read_cache_compress, we stream the 23MB ROM in chunks
-    read_cache = read_cache_compress;
-    
+    // --- 4. CONFIGURE CACHE WINDOW ---
     if(option_fullcache) {
         num_cache = CACHE_SIZE >> BLOCK_SHIFT;
         block_data = malloc(block_size);
     } else {
-        // Use the end of GFX_MEMORY for the decompression buffer
         num_cache = ((CACHE_SIZE - block_size) & ~0xffff) >> BLOCK_SHIFT;
         block_data = &GFX_MEMORY[num_cache << BLOCK_SHIFT];
     }
 
-    msg_printf("Streaming Mode: %dKB window allocated.\n", (num_cache << BLOCK_SHIFT) / 1024);
+    msg_printf("Streaming from cdrom0... %dKB window.\n", (num_cache << BLOCK_SHIFT) / 1024);
 
     for (i = 0; i < num_cache; i++)
         cache_data[i].idx = i;
@@ -265,16 +262,13 @@ int cache_start(void)
 
     if (!fill_cache())
     {
-        msg_printf("Initial cache fill failed!\n");
+        msg_printf("Initial fill failed!\n");
         if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
-    /* Note: We do not fclose(cache_fd) here. 
-       read_cache_compress requires an open handle to swap blocks from the disc.
-    */
-
-    msg_printf("Cache setup complete.\n");
+    // handle remains open for streaming
+    msg_printf("Cache operational.\n");
     return 1;
 }
 
@@ -283,16 +277,12 @@ void cache_shutdown(void)
     num_cache = 0;
     if(block_data != NULL) free(block_data);
     block_data = NULL;
-    
     if (cache_fd != NULL) {
         fclose(cache_fd);
         cache_fd = NULL;
     }
 }
 
-void cache_sleep(int flag)
-{
-    // No-op
-}
+void cache_sleep(int flag) {}
 
 #endif /* USE_CACHE */
