@@ -210,26 +210,38 @@ int cache_start(void)
     int i;
     u32 size = 0;
 
-    // --- FIX: Force Hardware Paths & Prevent Host Mounts ---
+    // --- FIX: Explicit Hardware Paths for PCSX2/PS2 ---
     extern char game_dir[];
     extern char cache_dir[];
     strcpy(game_dir, "cdrom0:\\ROMS");
     strcpy(cache_dir, "mc1:");
 
-    cache_fd = cachefile_open();
+    // Attempt 1: Direct open from root (standard lowercase)
+    cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
+
+    // Attempt 2: ISO9660 Uppercase (common on Mastered Discs)
+    if (cache_fd == NULL) {
+        cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
+    }
+
+    // Attempt 3: ISO9660 Version String (strict hardware compatibility)
+    if (cache_fd == NULL) {
+        cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
+    }
 
     // --- FIX: Prevent TLB Miss on Load Failure ---
-    if (cache_fd == NULL || (int)cache_fd < 0) 
+    if (cache_fd == NULL) 
     {
-        msg_printf("ERROR: rominfo.cps2 not found (fd: %d).\n", (int)cache_fd);
-        msg_printf("Check cdrom0:\\CONFIG\\ROMINFO.CPS2\n");
-        return 0; // Aborting here prevents the TLB Store crash
+        msg_printf("ERROR: rominfo.cps2 not found on cdrom0:\n");
+        msg_printf("Verify file is in the ISO root directory.\n");
+        return 0; 
     }
 
     GFX_MEMORY = upper_memory;
 
     if(!GFX_MEMORY) {
         msg_printf("ERROR: Could not allocate cache memory.\n");
+        if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
@@ -268,6 +280,7 @@ int cache_start(void)
         msg_printf("Cache load error!!!\n");
         pad_wait_press(PAD_WAIT_INFINITY);
         Loop = LOOP_EXIT;
+        if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
