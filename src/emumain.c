@@ -63,18 +63,17 @@ int main(int argc, char *argv[]) {
     SDL_ShowCursor(SDL_DISABLE);
     SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
 
-    // --- LOGGING & STABILITY FIX ---
-    // Print status to PCSX2 Console for debugging
+    // Status output to PCSX2 Terminal
     printf("[PS2] LaunchDir: %s\n", launchDir);
     printf("[PS2] GameDir: %s\n", game_dir);
-    printf("[PS2] Waiting for IOP to settle...\n");
+    printf("[PS2] Waiting for IOP modules to settle...\n");
 
     // Give the hardware a moment to breathe before jumping into the engine
     SDL_Delay(500); 
 
     printf("[PS2] Starting CPS2 Engine...\n");
-    // -------------------------------
 
+    // This enters the emulator loop.
     cps2_main();
     
     return 0;
