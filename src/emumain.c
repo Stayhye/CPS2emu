@@ -1,80 +1,70 @@
-#include <tamtypes.h>
+/******************************************************************************
+    emumain.c
+    Main Emulator Logic & Path Overrides
+******************************************************************************/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <malloc.h>
-#include <unistd.h>
-
-#include <SDL/SDL.h>
-#include <kernel.h>
-#include <sifrpc.h>
-#include <loadfile.h>
-
-/* Local Headers */
 #include "emumain.h"
-#include "inptport.h"
-#include "getopt.h"
+#include "common.h"
 
-// Set global directories
-char launchDir[MAX_PATH];
+/* Global Paths - Forced to Hardware */
 char game_dir[MAX_PATH] = "cdrom0:\\ROMS";
-char cache_dir[MAX_PATH] = "mc1:"; 
+char cache_dir[MAX_PATH] = "mc1:";
+char save_dir[MAX_PATH] = "mc1:/CPS2_SAVE";
 
-void ps2_init_modules() {
-    SifInitRpc(0);
-    
-    // Core ROM Modules
-    SifLoadModule("rom0:LIBSD", 0, NULL);
-    
-    // Load Memory Card Drivers (Required for mc1: access)
-    SifLoadModule("rom0:MCMAN", 0, NULL);
-    SifLoadModule("rom0:MCSERV", 0, NULL);
-    
-    // Load Audio Driver from ISO
-    SifLoadModule("cdrom0:\\AUDSRV.IRX;1", 0, NULL);
-    
-    // Note: USBD and USBKBD are loaded here. 
-    // The GitHub Action applies the Opcode NOP patch to prevent the hang.
-    SifLoadModule("cdrom0:\\USBD.IRX;1", 0, NULL);
-    SifLoadModule("cdrom0:\\USBKBD.IRX;1", 0, NULL);
-    
-    // Settling time for IOP
-    for(volatile int i = 0; i < 100000; i++) { __asm__("nop"); }
-}
+/* This is the global ROM name. Force it to empty so menu triggers. */
+char game_name[16] = "";
 
-int main(int argc, char *argv[]) {
-    // Force Launch Directory to CD-ROM to fix "host:/" errors
-    strcpy(launchDir, "cdrom0:\\");
-    chdir("cdrom0:\\");
+/* FORCE_CDROM_PATH
+   This replaces the standard fopen to prevent hardcoded "host:" calls 
+   from escaping to the IOP.
+*/
+FILE* ps2_fopen_override(const char* filename, const char* mode) {
+    char final_path[MAX_PATH];
 
-    // Initialize RPC and load IRX modules
-    ps2_init_modules();
-
-    // High priority for the emulator thread
-    ChangeThreadPriority(GetThreadId(), 72);
-
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
-        printf("SDL Init Failed: %s\n", SDL_GetError());
-        return -1;
+    // If the path already has a device prefix, use it.
+    if (strstr(filename, ":")) {
+        // If it's trying to use host, redirect it to cdrom
+        if (strncmp(filename, "host", 4) == 0) {
+            snprintf(final_path, MAX_PATH, "cdrom0:\\%s", strchr(filename, ':') + 1);
+        } else {
+            strncpy(final_path, filename, MAX_PATH);
+        }
+    } else {
+        // No prefix? Force it to the ROMS directory on CD
+        snprintf(final_path, MAX_PATH, "cdrom0:\\ROMS\\%s", filename);
     }
 
-    SDL_EventState(SDL_KEYDOWN, SDL_IGNORE);
-    SDL_ShowCursor(SDL_DISABLE);
-    SDL_SetVideoMode(320, 240, 16, SDL_HWSURFACE | SDL_DOUBLEBUF);
+    printf("[I/O] Redirected Open: %s\n", final_path);
+    return fopen(final_path, mode);
+}
 
-    // Status output to PCSX2 Terminal
-    printf("[PS2] LaunchDir: %s\n", launchDir);
-    printf("[PS2] GameDir: %s\n", game_dir);
-    printf("[PS2] Waiting for IOP modules to settle...\n");
+// Map the override
+#define fopen ps2_fopen_override
 
-    // Give the hardware a moment to breathe before jumping into the engine
-    SDL_Delay(500); 
-
-    printf("[PS2] Starting CPS2 Engine...\n");
-
-    // This enters the emulator loop.
-    cps2_main();
+void emu_init_globals() {
+    // Zero out everything to prevent "last played" auto-loads
+    memset(game_name, 0, sizeof(game_name));
+    emu_status = EMU_MENU;
     
-    return 0;
+    // Ensure directories are correctly terminated for PS2 drivers
+    strcpy(game_dir, "cdrom0:\\ROMS\\");
+    strcpy(cache_dir, "mc1:/");
+}
+
+int emu_start() {
+    printf("[EMU] Initializing Globals...\n");
+    emu_init_globals();
+
+    // Force the menu loop immediately
+    printf("[EMU] Entering Menu Loop (Forced)\n");
+    return menu_loop();
+}
+
+void emu_exit_to_menu() {
+    rom_unload();
+    emu_status = EMU_MENU;
+    printf("[EMU] Returned to Menu.\n");
 }
