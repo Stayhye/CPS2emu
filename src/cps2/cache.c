@@ -1,6 +1,6 @@
 /******************************************************************************
     cache.c
-    Memory cache interface function
+    Memory cache interface function - Optimized for Menu Selection
 ******************************************************************************/
 
 #include <stdio.h>
@@ -20,7 +20,6 @@
 
 #define GFX_MEMORY            memory_region_gfx1
 #define GFX_SIZE            memory_length_gfx1
-#define CHECK_FNAME            "block_empty"
 
 /******************************************************************************
     Global variable
@@ -68,6 +67,8 @@ static inline void load_block(int index, int offset)
     u8 src[BLOCK_SIZE];
     u8 dst[BLOCK_SIZE];
 
+    if (!block_data) return;
+
     size = block_data[offset] | (block_data[offset + 1] << 8);
     if(size) {
         length = BLOCK_SIZE;
@@ -85,13 +86,10 @@ static inline void load_block(int index, int offset)
 
 static int fill_cache(void)
 {
-    int i, block, offset, size, length;
+    int i, block;
     int block_free = 0;
     cache_t *p;
 
-    i = 0;
-    block = 0;
-    
     if (cache_fd == NULL) return 0;
 
     if(block_data == NULL) {
@@ -106,6 +104,8 @@ static int fill_cache(void)
      
     msg_printf("Fill cache data... 0%%\n");
 
+    i = 0;
+    block = 0;
     while (i < num_cache)
     {
         if (block_offset[block] != BLOCK_EMPTY)
@@ -114,7 +114,7 @@ static int fill_cache(void)
             p->block = block;
             blocks[block] = p->idx;
             
-            load_block(p->idx, block_offset[new_block]); // Use current block loop index
+            load_block(p->idx, block_offset[block]);
 
             head = p->next;
             head->prev = NULL;
@@ -152,7 +152,6 @@ static u32 read_cache_static(u32 offset)
 
 static u32 read_cache_compress(u32 offset)
 {
-    int s;
     s16 new_block = offset >> BLOCK_SHIFT;
     u32 idx = blocks[new_block];
     cache_t *p;
@@ -208,35 +207,35 @@ int cache_start(void)
 {
     int i;
 
-    // --- 1. FORCE STREAMING MODE IMMEDIATELY ---
-    // This stops the emulator from even trying to fit the 23MB ROM in RAM
+    // --- STREAMING SETUP ---
     read_cache = read_cache_compress;
 
-    // --- 2. SET HARDWARE PATHS ---
+    // --- PATHING ---
     extern char game_dir[];
     extern char cache_dir[];
     strcpy(game_dir, "cdrom0:\\ROMS");
     strcpy(cache_dir, "mc1:");
 
-    // --- 3. EXPLICIT ISO9660 OPEN ---
-    cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
+    // --- ISO DISCOVERY ---
+    // Since you are selecting Avp, ensure rominfo.cps2 is at root or adjust here
+    cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
     if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
-    if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
+    if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
 
     if (cache_fd == NULL) 
     {
-        msg_printf("ERROR: rominfo.cps2 not found.\n");
+        msg_printf("ERROR: Cache Info not found on cdrom0.\n");
         return 0; 
     }
 
     GFX_MEMORY = upper_memory;
     if(!GFX_MEMORY) {
-        msg_printf("ERROR: Memory pointer GFX_MEMORY is NULL.\n");
+        msg_printf("ERROR: GFX_MEMORY is NULL.\n");
         if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
-    // --- 4. CONFIGURE CACHE WINDOW ---
+    // --- CONFIGURE WINDOW ---
     if(option_fullcache) {
         num_cache = CACHE_SIZE >> BLOCK_SHIFT;
         block_data = malloc(block_size);
@@ -245,7 +244,7 @@ int cache_start(void)
         block_data = &GFX_MEMORY[num_cache << BLOCK_SHIFT];
     }
 
-    msg_printf("Streaming from cdrom0... %dKB window.\n", (num_cache << BLOCK_SHIFT) / 1024);
+    msg_printf("Loading AVPU Cache...\n");
 
     for (i = 0; i < num_cache; i++)
         cache_data[i].idx = i;
@@ -262,13 +261,12 @@ int cache_start(void)
 
     if (!fill_cache())
     {
-        msg_printf("Initial fill failed!\n");
+        msg_printf("ROM Data load failed!\n");
         if (cache_fd) fclose(cache_fd);
         return 0;
     }
 
-    // handle remains open for streaming
-    msg_printf("Cache operational.\n");
+    msg_printf("AVPU Cache Initialized.\n");
     return 1;
 }
 
