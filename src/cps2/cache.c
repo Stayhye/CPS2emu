@@ -100,7 +100,8 @@ static int fill_cache(void)
     msg_printf("Loading cache data... \n");
 
     if (fseek(cache_fd, block_start, SEEK_SET) != 0) return 0;
-    fread(block_data, sizeof(char), block_size, cache_fd);
+    
+    if (fread(block_data, sizeof(char), block_size, cache_fd) <= 0) return 0;
      
     msg_printf("Fill cache data... 0%%\n");
 
@@ -207,17 +208,15 @@ int cache_start(void)
 {
     int i;
 
-    // --- STREAMING SETUP ---
+    // Force streaming mode for large ROM compatibility
     read_cache = read_cache_compress;
 
-    // --- PATHING ---
     extern char game_dir[];
     extern char cache_dir[];
     strcpy(game_dir, "cdrom0:\\ROMS");
     strcpy(cache_dir, "mc1:");
 
-    // --- ISO DISCOVERY ---
-    // Since you are selecting Avp, ensure rominfo.cps2 is at root or adjust here
+    // Search for ROM info file
     cache_fd = fopen("cdrom0:\\ROMINFO.CPS2;1", "rb");
     if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\ROMINFO.CPS2", "rb");
     if (cache_fd == NULL) cache_fd = fopen("cdrom0:\\rominfo.cps2", "rb");
@@ -235,16 +234,16 @@ int cache_start(void)
         return 0;
     }
 
-    // --- CONFIGURE WINDOW ---
+    // Configure the cache window size
     if(option_fullcache) {
         num_cache = CACHE_SIZE >> BLOCK_SHIFT;
-        block_data = malloc(block_size);
+        block_data = (u8 *)malloc(block_size);
     } else {
         num_cache = ((CACHE_SIZE - block_size) & ~0xffff) >> BLOCK_SHIFT;
         block_data = &GFX_MEMORY[num_cache << BLOCK_SHIFT];
     }
 
-    msg_printf("Loading AVPU Cache...\n");
+    msg_printf("Initializing AVPU Cache Window...\n");
 
     for (i = 0; i < num_cache; i++)
         cache_data[i].idx = i;
@@ -266,14 +265,16 @@ int cache_start(void)
         return 0;
     }
 
-    msg_printf("AVPU Cache Initialized.\n");
+    msg_printf("AVPU Ready.\n");
     return 1;
 }
 
 void cache_shutdown(void)
 {
     num_cache = 0;
-    if(block_data != NULL) free(block_data);
+    if(block_data != NULL) {
+        if(option_fullcache) free(block_data);
+    }
     block_data = NULL;
     if (cache_fd != NULL) {
         fclose(cache_fd);
